@@ -1,7 +1,9 @@
 use crate::prelude::*;
 use std::collections::VecDeque;
 use rand::Rng;
+use card::{ Value, Color };
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Deck {
     cards: VecDeque<Card>,
 }

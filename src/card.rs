@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Color {
     Red,
     Yellow,
@@ -19,7 +19,7 @@ impl From<i32> for Color {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Value {
     Zero,
     One,
@@ -62,6 +62,7 @@ impl From<i32> for Value {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Card {
     color: Color,
     value: Value,

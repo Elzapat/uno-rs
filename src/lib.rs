@@ -1,5 +1,3 @@
-pub mod value;
-pub mod color;
 pub mod card;
 pub mod deck;
 
