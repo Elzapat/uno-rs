@@ -1,9 +1,11 @@
 pub mod card;
 pub mod deck;
+pub mod player;
 
 pub mod prelude {
     pub use crate::{
         card::{ self, Card },
+        player::*,
         deck::*,
     };
 }
