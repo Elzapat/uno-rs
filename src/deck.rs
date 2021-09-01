@@ -43,14 +43,14 @@ impl Deck {
     }
 
     /// Get the number of cards remaining in the deck
-    pub fn number_of_cards(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.cards.len()
     }
 
     /// Shuffle the deck randomly
     pub fn shuffle(&mut self) {
         let mut rng = rand::thread_rng();
-        let n = self.number_of_cards();
+        let n = self.size();
 
         for i in 0..n {
             let r = i + (rng.gen::<usize>() % (n - i));

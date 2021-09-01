@@ -2,8 +2,20 @@ use crate::prelude::*;
 
 /// Structure to define a Uno player
 #[derive(Clone, Debug, PartialEq)]
-struct Player {
-    hand: Vec<Card>,
-    is_playing: bool,
-    score: u32,
+pub struct Player {
+    pub hand: Vec<Card>,
+    pub is_playing: bool,
+    pub score: u32,
+    pub username: String,
+}
+
+impl Player {
+    pub fn new(username: String) -> Player {
+        Player {
+            hand: Vec::new(),
+            is_playing: false,
+            score: 0,
+            username,
+        }
+    }
 }

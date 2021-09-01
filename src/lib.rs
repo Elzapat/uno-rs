@@ -1,12 +1,14 @@
 pub mod card;
 pub mod deck;
 pub mod player;
+pub mod packet;
 
 pub mod prelude {
     pub use crate::{
         card::{ self, Card },
         player::*,
         deck::*,
+        packet,
     };
 }
 
@@ -16,6 +18,6 @@ mod tests {
 
     #[test]
     fn full_deck_size() {
-        assert_eq!(Deck::full().number_of_cards(), 108);
+        assert_eq!(Deck::full().size(), 108);
     }
 }
