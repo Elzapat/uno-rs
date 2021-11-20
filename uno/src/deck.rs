@@ -17,16 +17,19 @@ impl Deck {
     }
 
     /// Fill the deck with the cards of a base Uno game:
-    ///   - 1 Zero of each color, and 2 of the other numbers
-    ///   - 2 draw two, 2 reverse and 2 skip of each color
-    ///   - 4 wild cards and 4 wild draw 4 cards
+    ///  * 1 Zero of each color, and 2 of the other numbers
+    ///  * 2 draw two, 2 reverse and 2 skip of each color
+    ///  * 4 wild cards and 4 wild draw 4 cards
     pub fn full() -> Deck {
         let mut deck = Deck::empty();
 
         for color in (Color::Red as i32)..=(Color::Blue as i32) {
             for value in (Value::Zero as i32)..=(Value::DrawTwo as i32) {
                 for i in 0..2 {
-                    if i == 1 && value == Value::Zero as i32 { continue; }
+                    if i == 1 && value == Value::Zero as i32 {
+                        continue;
+                    }
+
                     deck.insert((color, value).into());
                 }
             }
