@@ -20,8 +20,6 @@ pub fn run() {
     // when building for Web, use WebGL2 rendering
     #[cfg(target_arch = "wasm32")]
     app.add_plugin(bevy_webgl2::WebGL2Plugin);
-    
-    // TODO: add all your other stuff to `app` as usual
     app.add_plugin(DragAndDropPlugin);
     app.add_plugin(CursorStatePlugin);
     app.add_startup_system(setup.system());
@@ -75,7 +73,7 @@ fn setup(
             transform: Transform::from_scale(Vec3::splat(0.5)),
             ..Default::default()
         })
-        // .insert(Draggable)
+        .insert(Draggable)
         // .insert(Hoverable)
         .insert(Size { width: 512.0, height: 512.0 });
 }

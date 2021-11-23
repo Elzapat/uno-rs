@@ -11,7 +11,7 @@ impl Plugin for CursorStatePlugin {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CursorState {
     pub cursor_world: Vec2,
     pub delta: Vec2,
@@ -19,27 +19,22 @@ pub struct CursorState {
 }
 
 fn setup(mut commands: Commands) {
-    commands.spawn().insert(CursorState::default());
+    commands.insert_resource(CursorState::default());
 }
 
 fn cursor_state(
+    mut cursor_state: ResMut<CursorState>,
     mut cursor_moved: EventReader<CursorMoved>,
     windows: Res<Windows>,
-    mut query_cursor_state: Query<&mut CursorState>,
     query_camera: Query<&Transform, With<Camera>>,
 ) {
-    for mut cursor_state in query_cursor_state.iter_mut() {
-        cursor_state.delta = Vec2::default();
-        for cursor in cursor_moved.iter() {
-            let window = windows.get_primary().unwrap();
-            let cam_transform = query_camera.single().unwrap();
-            let new_cursor = cursor_to_world(window, cam_transform, cursor.position);
-            cursor_state.delta = cursor.position - cursor_state.last_position;
-            cursor_state.last_position = cursor.position;
-            // cursor_state.old_cursor = cursor_state.cursor_world;
-            // println!("delta: {}", cursor_state.delta);
-            cursor_state.cursor_world = new_cursor;
-        }
+    for cursor in cursor_moved.iter() {
+        let window = windows.get_primary().unwrap();
+        let cam_transform = query_camera.single().unwrap();
+        cursor_state.cursor_world = cursor_to_world(window, cam_transform, cursor.position);
+
+        cursor_state.delta = cursor_state.delta + (cursor_state.cursor_world - cursor_state.last_position);
+        cursor_state.last_position = cursor_state.cursor_world;
     }
 }
 
@@ -55,4 +50,3 @@ fn cursor_to_world(window: &Window, cam_transform: &Transform, cursor_pos: Vec2)
     let out = cam_transform.compute_matrix() * screen_pos.extend(0.0).extend(1.0);
     Vec2::new(out.x, out.y)
 }
-

@@ -1,7 +1,9 @@
+resolver = 2
+
 [workspace]
 
 members = [
-	"uno",
-	"uno-client",
-	"uno-server",
+    "uno",
+    "uno-client",
+    "uno-server",
 ]
