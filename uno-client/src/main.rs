@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::{ egui, EguiContext, EguiPlugin };
 
 pub mod cursor_state;
 pub mod drag_and_drop;
@@ -11,14 +12,46 @@ pub struct Size {
     height: f32,
 }
 
+pub struct Settings {
+    username: String,
+    enable_animations: bool,
+}
+
 fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
+        .add_plugin(EguiPlugin)
         .add_plugin(CursorStatePlugin)
         .add_plugin(DragAndDropPlugin)
         .add_startup_system(setup.system())
         .add_system(animate_sprite_system.system())
+        .add_system(ui_example.system())
+        .insert_resource(Settings { username: String::from(""), enable_animations: true })
         .run();
+}
+
+fn ui_example(egui_context: ResMut<EguiContext>, mut settings: ResMut<Settings>) {
+    egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add(
+                egui::Label::new("Settings")
+                    .text_style(egui::TextStyle::Heading)      
+                    .strong()
+            );
+        });
+
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            ui.label("Username: ");
+            if ui.text_edit_singleline(&mut settings.username).lost_focus() {
+                println!("test");
+                println!("{}", settings.username);
+            }
+
+            ui.checkbox(&mut settings.enable_animations, "Enable animations");
+        })
+    });
 }
 
 fn animate_sprite_system(
