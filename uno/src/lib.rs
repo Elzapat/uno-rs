@@ -8,7 +8,7 @@ pub mod prelude {
         card::{ self, Card },
         player::*,
         deck::*,
-        packet,
+        packet::{ Packet, self },
     };
 }
 

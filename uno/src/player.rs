@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
 /// Structure to define a Uno player
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Player {
     pub hand: Vec<Card>,
     pub is_playing: bool,
@@ -17,5 +17,11 @@ impl Player {
             score: 0,
             username,
         }
+    }
+}
+
+impl PartialEq for Player {
+    fn eq(&self, other: &Self) -> bool {
+        self.username == other.username
     }
 }

@@ -1,4 +1,7 @@
-use std::iter::FromIterator;
+use std::{
+    iter::FromIterator,
+    ops::RangeBounds,
+};
 
 #[derive(Debug)]
 pub enum PacketError {
@@ -9,6 +12,7 @@ pub enum PacketError {
 pub const DELIMITER: u8 = 255;
 
 /// Represents a fully parsed packet
+#[derive(Clone, Debug)]
 pub struct Packet {
     pub command: Command,
     pub args: Args,
@@ -35,19 +39,22 @@ pub enum State {
 }
 
 /// Command bytes
+#[derive(Clone, Debug)]
 pub enum Command {
-    CreateGame = 0,
-    JoinGame = 1,
-    NumberOfPlayersInGame = 2,
-    Unknown = 254,
+    Error = 0,
+    CreateLobby = 1,
+    JoinLobby = 2,
+    LobbiesInfo = 3,
+    Unknown = 255,
 }
 
 impl From<u8> for Command {
     fn from(v: u8) -> Command {
         match v {
-            0 => Command::CreateGame,
-            1 => Command::JoinGame,
-            2 => Command::NumberOfPlayersInGame,
+            0 => Command::Error,
+            1 => Command::CreateLobby,
+            2 => Command::JoinLobby,
+            3 => Command::LobbiesInfo,
             _ => Command::Unknown,
         }
     }
@@ -59,26 +66,8 @@ impl Into<u8> for Command {
     }
 }
 
-/// Arg bytes
-pub enum Arg {
-    Unknown = 254,
-}
-
-pub struct Args(Vec<Arg>);
-
-impl From<u8> for Arg {
-    fn from(v: u8) -> Arg {
-        match v {
-            _ => Arg::Unknown,
-        }
-    }
-}
-
-impl Into<u8> for Arg {
-    fn into(self) -> u8 {
-        self as u8
-    }
-}
+#[derive(Clone, Debug)]
+pub struct Args(Vec<u8>);
 
 impl Args {
     fn new() -> Self {
@@ -87,6 +76,39 @@ impl Args {
 
     fn add_byte(&mut self, b: u8) {
         self.0.push(b.into());
+    }
+
+    pub fn get(&self, index: usize) -> Option<&u8> {
+        self.0.get(index)
+    }
+
+    pub fn get_range<R>(&mut self, range: R) -> Vec<u8>
+    where
+        R: RangeBounds<usize>,
+    {
+        self.0.drain(range).collect()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl From<u8> for Args {
+    fn from(v: u8) -> Args {
+        Self(vec![v])
+    }
+}
+
+impl From<&[u8]> for Args {
+    fn from(v: &[u8]) -> Self {
+        Self(v.to_vec())
+    }
+}
+
+impl From<Vec<u8>> for Args {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
     }
 }
 
