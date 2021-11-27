@@ -3513,6 +3513,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bevy_webgl2",
+ "uno",
  "wasm-bindgen",
 ]
 

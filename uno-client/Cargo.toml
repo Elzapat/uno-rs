@@ -16,9 +16,11 @@ crate-type = ["cdylib", "rlib"]
 # bevy = {version = "0.5", default-features = false, features = ["bevy_wgpu", "bevy_winit", "render", "x11"]}
 bevy = "0.5"
 bevy_egui = "0.7"
+uno = { path = "../uno" }
 
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 bevy = { version = "0.5", default-features = false, features = ["bevy_winit", "render"] }
 bevy_egui = "0.7"
 bevy_webgl2 = "0.5"
+uno = { path = "../uno" }

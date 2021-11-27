@@ -1,11 +1,13 @@
 use bevy::prelude::*;
-use bevy_egui::{ egui, EguiContext, EguiPlugin };
+use bevy_egui::EguiPlugin;
 
 pub mod cursor_state;
 pub mod drag_and_drop;
+mod menu;
 
 use drag_and_drop::*;
 use cursor_state::*;
+use menu::MenuPlugin;
 
 pub struct Size {
     width: f32,
@@ -23,88 +25,11 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_plugin(CursorStatePlugin)
         .add_plugin(DragAndDropPlugin)
+        .add_plugin(MenuPlugin)
         .add_startup_system(setup.system())
-        .add_system(animate_sprite_system.system())
-        .add_system(ui_example.system())
+        // .add_system(animate_sprite_system.system())
         .insert_resource(Settings { username: String::from(""), enable_animations: true })
         .run();
-}
-
-fn ui_example(egui_context: ResMut<EguiContext>, mut settings: ResMut<Settings>) {
-    egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
-        ui.vertical_centered(|ui| {
-            ui.add(
-                egui::Label::new("Settings")
-                    .text_style(egui::TextStyle::Heading)
-                    .strong()
-            );
-        });
-
-        ui.separator();
-
-        ui.horizontal(|ui| {
-            ui.label("Username: ");
-            if ui.text_edit_singleline(&mut settings.username).lost_focus() {
-                println!("{}", settings.username);
-            }
-
-            ui.checkbox(&mut settings.enable_animations, "Enable animations");
-        })
-    });
-//     egui::SidePanel::left("my_left_panel").show(egui_context.ctx(), |ui| {
-//         ui.set_visible(false);
-//         ui.add_space(100.0);
-//         ui.vertical_centered(|ui| {
-//             ui.add(
-//                 egui::Label::new("Uno")
-//                     .text_style(egui::TextStyle::Heading)
-//                     .strong()
-//             );
-//         });
-//         ui.separator();
-//
-//         ui.label("Hello World!");
-//     });
-
-    egui::Window::new("Uno")
-        .fixed_size([400.0, 400.0])
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        // .default_height(400.0)
-        // .min_width(400.0)
-        .collapsible(false)
-        .resizable(false)
-        .show(egui_context.ctx(), |ui| {
-            egui::ScrollArea::auto_sized().show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.heading("Lobbies");
-                });
-                ui.separator();
-
-                ui.vertical(|ui| {
-                    for i in 1..1 {
-                        ui.add_space(10.0);
-                        ui.group(|ui| {
-                            ui.heading(format!("Lobby #{}", i));
-                            ui.separator();
-                            ui.horizontal(|ui| {
-                                ui.label(format!("1/5"));
-                                ui.button("Join Lobby");
-                                ui.set_enabled(false);
-                                ui.button("Leave Lobby");
-                            });
-                        });
-                    }
-                    ui.add_space(10.0);
-                });
-            });
-
-            ui.separator();
-            ui.vertical_centered(|ui| {
-                ui.add_space(10.0);
-                ui.button("Create lobby");
-                ui.add_space(10.0);
-            });
-        });
 }
 
 fn animate_sprite_system(
