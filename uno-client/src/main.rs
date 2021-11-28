@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
+use std::net::TcpStream;
 
 pub mod cursor_state;
 pub mod drag_and_drop;
@@ -19,8 +20,13 @@ pub struct Settings {
     enable_animations: bool,
 }
 
+pub struct Server {
+    socket: TcpStream,
+}
+
 fn main() {
     App::build()
+        .insert_resource(Server { socket: TcpStream::connect("127.0.0.1:2905").unwrap() })
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(CursorStatePlugin)
@@ -48,10 +54,13 @@ fn animate_sprite_system(
 
 fn setup(
     mut commands: Commands,
+    mut server: ResMut<Server>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    server.socket.set_nonblocking(true).unwrap();
+
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     const SPRITE_WIDTH: f32 = 4860.0 / 10.0;

@@ -1,11 +1,25 @@
 use std::{
     iter::FromIterator,
     ops::RangeBounds,
+    net::TcpStream,
+    io::{ Read, Write, self },
 };
 
 #[derive(Debug)]
 pub enum PacketError {
     ZeroSizePacket,
+}
+
+impl std::fmt::Display for PacketError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for PacketError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
 }
 
 /// Delimiter between packets
@@ -18,24 +32,42 @@ pub struct Packet {
     pub args: Args,
 }
 
-impl Packet {
-    /// Parse a packet from a Vec of bytes
-    pub fn parse_packet(mut packet: Vec<u8>) -> Result<Self, PacketError> {
-        if packet.len() < 1 {
-            return Err(PacketError::ZeroSizePacket);
-        }
-
-        Ok(Self {
-            command: packet[0].into(),
-            args: packet.drain(1..).collect(),
-        })
+/// Parse a packet from a Vec of bytes
+pub fn parse_packet(mut packet: Vec<u8>) -> Result<Packet, io::Error> {
+    if packet.len() < 1 {
+        return Err(io::Error::new(io::ErrorKind::Other, PacketError::ZeroSizePacket));
     }
+
+    Ok(Packet {
+        command: packet[0].into(),
+        args: packet.drain(1..).collect(),
+    })
 }
 
-/// Current state when reading TCP stream
-pub enum State {
-    AcceptingCommand,
-    AcceptingArgs,
+pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>, io::Error> {
+    let mut buffer = [0; 32];
+    let size = socket.read(&mut buffer)?;
+    let mut current_packet = Vec::new();
+    let mut packets = Vec::new();
+
+    for i in 0..size {
+        if DELIMITER == buffer[i] {
+            packets.push(parse_packet(current_packet.drain(..).collect())?);
+        } else {
+            current_packet.push(buffer[i]);
+        }
+    }
+
+    Ok(packets)
+}
+
+pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Result<(), io::Error>
+where
+    A: Into<Args>,
+{
+    socket.write(&[&[command as u8], args.into().as_slice(), &[DELIMITER]].concat())?;
+
+    Ok(())
 }
 
 /// Command bytes
@@ -44,7 +76,8 @@ pub enum Command {
     Error = 0,
     CreateLobby = 1,
     JoinLobby = 2,
-    LobbiesInfo = 3,
+    LeaveLobby = 3,
+    LobbiesInfo = 4,
     Unknown = 255,
 }
 
@@ -54,7 +87,8 @@ impl From<u8> for Command {
             0 => Command::Error,
             1 => Command::CreateLobby,
             2 => Command::JoinLobby,
-            3 => Command::LobbiesInfo,
+            3 => Command::LeaveLobby,
+            4 => Command::LobbiesInfo,
             _ => Command::Unknown,
         }
     }

@@ -7,11 +7,14 @@ use std::{
     sync::atomic::{ AtomicUsize, Ordering },
 };
 use crate::{
-    server_result::ServerResult,
+    server_result::{ ServerResult, ServerError },
     client::Client,
     game::Game,
 };
-use uno::packet::{ Packet, Command };
+use uno::packet::{
+    Packet, Command,
+    read_socket, write_socket,
+};
 
 struct Lobby {
     id: usize,
@@ -70,11 +73,16 @@ impl Server {
 
     pub fn run() -> ServerResult<()> {
         let mut server = Server::new()?;
+        server.listener.set_nonblocking(true)?;
 
         loop {
             server.new_connections()?;
             for client in server.clients.iter_mut() {
-                client.read()?;
+                client.incoming_packets = match read_socket(&mut client.socket) {
+                    Ok(packets) => { info!("{:?}", packets); packets },
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                    Err(e) => return Err(ServerError::IoError(e)),
+                };
             }
             server.execute_commands()?;
         }
@@ -87,6 +95,7 @@ impl Server {
                 self.clients.push(Client::new(socket));
                 info!("New connection: {}", ip);
             },
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {},
             Err(e) => error!("{}", e),
         };
 
@@ -95,26 +104,32 @@ impl Server {
 
     fn execute_commands(&mut self) -> ServerResult<()> {
         for client in self.clients.iter_mut() {
-            for packet in client.incoming_packets.clone() {
+            for packet in client.incoming_packets.drain(..) {
                 match packet.command {
                     Command::CreateLobby => {
                         if self.lobbies.len() < Lobby::MAX_LOBBIES {
                             let new_lobby = Lobby::new();
-                            client.send(Command::JoinLobby, new_lobby.id as u8)?;
+                            write_socket(&mut client.socket, Command::JoinLobby, new_lobby.id as u8)?;
                             self.lobbies.push(new_lobby);
                         } else {
-                            client.send(Command::Error, "Maximum lobby amount".as_bytes())?;
+                            write_socket(&mut client.socket, Command::Error, "Maximum lobby amount".as_bytes())?;
                         }
                     },
                     Command::JoinLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if self.lobbies.contains(&Lobby::with_id(*lobby_id as usize)) {
-                                client.send(Command::JoinLobby, *lobby_id)?;
+                                write_socket(&mut client.socket, Command::JoinLobby, *lobby_id)?;
                             } else {
-                                client.send(Command::Error, "Lobby doesn't exist".as_bytes())?;
+                                write_socket(&mut client.socket, Command::Error, "Lobby doesn't exist".as_bytes())?;
                             }
                         }
                     },
+                    Command::LeaveLobby => {
+
+                        if let Some(_lobby_id) = packet.args.get(0) {
+                            write_socket(&mut client.socket, Command::LeaveLobby, vec![])?;
+                        }
+                    }
                     Command::LobbiesInfo => {
                         let mut infos = vec![];
 
@@ -123,13 +138,11 @@ impl Server {
                             infos.push(lobby.number_players as u8);
                         }
 
-                        client.send(Command::LobbiesInfo, infos)?;
+                        write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
                     }
                     _ => {},
                 }
             }
-
-            client.incoming_packets.drain(..);
         }
 
         Ok(())
