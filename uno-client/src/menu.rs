@@ -20,27 +20,39 @@ struct Lobby {
     number_players: u8,
 }
 
+pub struct RefreshTimer(Timer);
+
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.insert_resource(LobbiesList(vec![]))
+            .insert_resource(RefreshTimer(Timer::from_seconds(1.0, true)))
             .add_state(LobbyState::LobbiesList)
             .add_system_set(
                 SystemSet::on_enter(LobbyState::LobbiesList)
-                    .with_system(lobbies_info.system())
+                    .with_system(refresh_lobbies_list.system())
             )
             .add_system(settings_panel.system())
             .add_system(read_incoming.system())
+            .add_system(refresh_lobbies_list.system())
             .add_system(lobby_panel.system());
     }
 }
 
-fn lobbies_info(mut server: ResMut<Server>) {
-    write_socket(&mut server.socket, Command::LobbiesInfo, vec![]).unwrap();
+fn refresh_lobbies_list(
+    time: Res<Time>,
+    mut refresh_timer: ResMut<RefreshTimer>,
+    mut server: ResMut<Server>,
+) {
+    refresh_timer.0.tick(time.delta());
+
+    if refresh_timer.0.finished() {
+        write_socket(&mut server.socket, Command::LobbiesInfo, vec![]).unwrap();
+    }
 }
 
 fn settings_panel(
-    egui_context: ResMut<EguiContext>,
     mut settings: ResMut<Settings>,
+    egui_context: ResMut<EguiContext>,
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
         ui.vertical_centered(|ui| {
@@ -91,7 +103,7 @@ fn read_incoming(
                             lobbies.0.push(Lobby {
                                 id: lobbies_raw[i],
                                 number_players: lobbies_raw[i + 1],
-                            }) 
+                            });
                         }
                     }
                 }
@@ -102,9 +114,10 @@ fn read_incoming(
 }
 
 fn lobby_panel(
-    egui_context: ResMut<EguiContext>,
-    lobby_state: Res<State<LobbyState>>,
     mut server: ResMut<Server>,
+    egui_context: Res<EguiContext>,
+    settings: Res<Settings>,
+    lobby_state: Res<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
 ) {
     let window = egui::Window::new("Uno")
@@ -122,7 +135,7 @@ fn lobby_panel(
             });
 
             ui.separator();
-            egui::ScrollArea::auto_sized().show(ui, |ui| {
+            egui::ScrollArea::from_max_height(400.0).show(ui, |ui| {
                 ui.vertical(|ui| {
                     for lobby in &lobbies.0 {
                         ui.add_space(10.0);
@@ -132,7 +145,10 @@ fn lobby_panel(
                             ui.horizontal(|ui| {
                                 ui.label(format!("{}/10", lobby.number_players));
                                 if ui.button("Join Lobby").clicked() {
-                                    write_socket(&mut server.socket, Command::JoinLobby, lobby.id).unwrap();
+                                    if settings.username.trim().is_empty() {
+                                    } else {
+                                        write_socket(&mut server.socket, Command::JoinLobby, lobby.id).unwrap();
+                                    }
                                 }
                             });
                         });
@@ -143,9 +159,15 @@ fn lobby_panel(
             ui.separator();
 
             ui.vertical_centered(|ui| {
+                egui::show_tooltip(ui.ctx(), egui::Id::new("my_tooltip"), |ui| {
+                    ui.label("Helpful text");
+                });
                 if ui.button("Create lobby").clicked() {
-                    write_socket(&mut server.socket, Command::CreateLobby, vec![]).unwrap(); 
-                    info!("here");
+                    if settings.username.trim().is_empty() {
+                        ui.painter().error(egui::Pos2::ZERO, "test error");
+                    } else {
+                        write_socket(&mut server.socket, Command::CreateLobby, vec![]).unwrap();
+                    }
                 }
             });
         }),

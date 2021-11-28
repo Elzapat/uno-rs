@@ -3,9 +3,8 @@ use uno::prelude::*;
 use crate::client::Client;
 
 enum GameState {
-    Lobby,
     Playing,
-    Finished,
+    EndLobby,
 }
 
 pub struct Game {
@@ -16,7 +15,7 @@ pub struct Game {
 impl Game {
     pub fn new() -> Game {
         Game {
-            state: GameState::Lobby,
+            state: GameState::Playing,
             clients: Vec::new(),
         }
     }
