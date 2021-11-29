@@ -13,7 +13,7 @@ use crate::{
     game::Game,
 };
 use uno::packet::{
-    Packet, Command,
+    Packet, Command, PacketError,
     read_socket, write_socket,
 };
 
@@ -57,6 +57,9 @@ impl Server {
                 client.incoming_packets = match read_socket(&mut client.socket) {
                     Ok(packets) => { info!("{:?}", packets); packets },
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                    Err(ref e) if let Some(&PacketError::ZeroSizePacket) = e.get_ref() => {
+                        continue 
+                    },
                     Err(e) => return Err(ServerError::IoError(e)),
                 };
             }

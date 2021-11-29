@@ -20,6 +20,11 @@ struct Lobby {
     number_players: u8,
 }
 
+struct Error {
+    message: String,
+    timer: Timer,
+}
+
 pub struct RefreshTimer(Timer);
 
 impl Plugin for MenuPlugin {
@@ -34,7 +39,27 @@ impl Plugin for MenuPlugin {
             .add_system(settings_panel.system())
             .add_system(read_incoming.system())
             .add_system(refresh_lobbies_list.system())
+            .add_system(display_error.system())
             .add_system(lobby_panel.system());
+    }
+}
+
+fn display_error(
+    mut commands: Commands,
+    time: Res<Time>,
+    egui_context: ResMut<EguiContext>,
+    mut query: Query<(Entity, &mut Error)>
+) {
+    for (entity, mut error) in query.iter_mut() {
+        error.timer.tick(time.delta());
+
+        egui::show_tooltip(egui_context.ctx(), egui::Id::new("Error"), |ui| {
+            ui.label(&error.message);
+        });
+
+        if error.timer.finished() {
+            commands.entity(entity).despawn();
+        }
     }
 }
 
@@ -77,6 +102,7 @@ fn settings_panel(
 }
 
 fn read_incoming(
+    mut commands: Commands,
     mut server: ResMut<Server>,
     mut lobby_state: ResMut<State<LobbyState>>,
     mut lobbies: ResMut<LobbiesList>,
@@ -106,6 +132,14 @@ fn read_incoming(
                             });
                         }
                     }
+                },
+                Command::Error => {
+                    if let Ok(error) = String::from_utf8(packet.args.get_range(..)) {
+                        commands.spawn().insert(Error {
+                            message: error,
+                            timer: Timer::from_seconds(5.0, false),
+                        });
+                    }
                 }
                 _ => {},
             };
@@ -114,6 +148,7 @@ fn read_incoming(
 }
 
 fn lobby_panel(
+    mut commands: Commands,
     mut server: ResMut<Server>,
     egui_context: Res<EguiContext>,
     settings: Res<Settings>,
@@ -146,6 +181,10 @@ fn lobby_panel(
                                 ui.label(format!("{}/10", lobby.number_players));
                                 if ui.button("Join Lobby").clicked() {
                                     if settings.username.trim().is_empty() {
+                                        commands.spawn().insert(Error {
+                                            message: "Please enter a username before joining a lobby".to_owned(),
+                                            timer: Timer::from_seconds(3.0, false),
+                                        });
                                     } else {
                                         write_socket(&mut server.socket, Command::JoinLobby, lobby.id).unwrap();
                                     }
@@ -159,12 +198,12 @@ fn lobby_panel(
             ui.separator();
 
             ui.vertical_centered(|ui| {
-                egui::show_tooltip(ui.ctx(), egui::Id::new("my_tooltip"), |ui| {
-                    ui.label("Helpful text");
-                });
                 if ui.button("Create lobby").clicked() {
                     if settings.username.trim().is_empty() {
-                        ui.painter().error(egui::Pos2::ZERO, "test error");
+                        commands.spawn().insert(Error {
+                            message: "Please enter a username before creating a lobby".to_owned(),
+                            timer: Timer::from_seconds(3.0, false),
+                        });
                     } else {
                         write_socket(&mut server.socket, Command::CreateLobby, vec![]).unwrap();
                     }

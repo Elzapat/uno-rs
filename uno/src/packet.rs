@@ -33,26 +33,27 @@ pub struct Packet {
 }
 
 /// Parse a packet from a Vec of bytes
-pub fn parse_packet(mut packet: Vec<u8>) -> Result<Packet, io::Error> {
-    if packet.len() < 1 {
-        return Err(io::Error::new(io::ErrorKind::Other, PacketError::ZeroSizePacket));
-    }
-
-    Ok(Packet {
+pub fn parse_packet(mut packet: Vec<u8>) -> Packet {
+    Packet {
         command: packet[0].into(),
         args: packet.drain(1..).collect(),
-    })
+    }
 }
 
 pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>, io::Error> {
     let mut buffer = [0; 32];
     let size = socket.read(&mut buffer)?;
+
+    if size < 1 {
+        return Err(io::Error::new(io::ErrorKind::Other, PacketError::ZeroSizePacket));
+    }
+
     let mut current_packet = Vec::new();
     let mut packets = Vec::new();
 
     for i in 0..size {
         if DELIMITER == buffer[i] {
-            packets.push(parse_packet(current_packet.drain(..).collect())?);
+            packets.push(parse_packet(current_packet.drain(..).collect()));
         } else {
             current_packet.push(buffer[i]);
         }
