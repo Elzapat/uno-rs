@@ -1,13 +1,13 @@
 use uno::prelude::*;
-use crate::ServerResult;
 use std::{
     net::TcpStream,
-    io::{ Read, Write },
+    cell::Cell,
 };
 
+#[derive(Debug)]
 pub struct Client {
     pub socket: TcpStream,
-    pub incoming_packets: Vec<packet::Packet>,
+    pub incoming_packets: <Vec<Cell<packet::Packet>>>,
     pub in_lobby: Option<usize>,
     pub player: Option<Player>,
 }

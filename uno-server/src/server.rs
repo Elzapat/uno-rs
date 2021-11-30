@@ -1,20 +1,19 @@
 use log::{ error, info };
 use std::{
-    net::{
-        TcpListener, TcpStream,
-    },
+    net::TcpListener,
     thread,
     sync::atomic::{ AtomicUsize, Ordering },
     collections::HashMap,
 };
 use crate::{
-    server_result::{ ServerResult, ServerError },
     client::Client,
     game::Game,
 };
-use uno::packet::{
-    Packet, Command, PacketError,
-    read_socket, write_socket,
+use uno::{
+    prelude::*,
+    packet::{
+        Command, read_socket, write_socket,
+    },
 };
 
 const MAX_LOBBY_PLAYERS: usize = 10;
@@ -38,7 +37,7 @@ pub struct Server {
 }
 
 impl Server {
-    fn new() -> ServerResult<Server> {
+    fn new() -> Result<Server> {
         Ok(Server {
             listener: TcpListener::bind("0.0.0.0:2905")?,
             clients: Vec::new(),
@@ -47,27 +46,18 @@ impl Server {
         })
     }
 
-    pub fn run() -> ServerResult<()> {
+    pub fn run() -> Result {
         let mut server = Server::new()?;
         server.listener.set_nonblocking(true)?;
 
         loop {
             server.new_connections()?;
-            for client in server.clients.iter_mut() {
-                client.incoming_packets = match read_socket(&mut client.socket) {
-                    Ok(packets) => { info!("{:?}", packets); packets },
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                    Err(ref e) if let Some(&PacketError::ZeroSizePacket) = e.get_ref() => {
-                        continue 
-                    },
-                    Err(e) => return Err(ServerError::IoError(e)),
-                };
-            }
+            server.read_sockets()?;
             server.execute_commands()?;
         }
     }
 
-    fn new_connections(&mut self) -> ServerResult<()> {
+    fn new_connections(&mut self) -> Result {
         match self.listener.accept() {
             Ok((socket, ip)) => {
                 socket.set_nonblocking(true)?;
@@ -81,9 +71,39 @@ impl Server {
         Ok(())
     }
 
-    fn execute_commands(&mut self) -> ServerResult<()> {
+    fn read_sockets(&mut self) -> Result {
+        let mut to_remove = None;
+
+        for (i, client) in self.clients.iter_mut().enumerate() {
+            client.incoming_packets = match read_socket(&mut client.socket) {
+                Ok(packets) => { info!("{:?}", packets); packets },
+                Err(e) => {
+                    if let Error::IoError(e) = e {
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            continue;
+                        } else {
+                            return Err(Error::IoError(e))
+                        }
+                    } else if let Error::UnoError(uno::error::UnoError::Disconnected) = e {
+                        to_remove = Some(i);
+                        continue;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+        }
+
+        if let Some(i) = to_remove {
+            self.clients.remove(i);
+        }
+
+        Ok(())
+    }
+
+    fn execute_commands(&mut self) -> Result {
         for client in self.clients.iter_mut() {
-            for packet in client.incoming_packets.drain(..) {
+            for mut packet in client.incoming_packets.drain(..) {
                 match packet.command {
                     Command::CreateLobby => {
                         if self.lobbies.len() < MAX_LOBBIES {
@@ -113,7 +133,7 @@ impl Server {
                                 }
                             }
                         }
-                    }
+                    },
                     Command::LobbiesInfo => {
                         let mut infos = vec![];
 
@@ -123,7 +143,29 @@ impl Server {
                         }
 
                         write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
-                    }
+                    },
+                    Command::LobbyInfo => {
+                        if let Some(lobby_id) = packet.args.get(0) {
+                            write_socket(&mut client.socket, Command::LobbyInfo, [
+                                &[*lobby_id, self.lobbies[&(*lobby_id as usize)] as u8],
+                                self.clients.clone()
+                                    .iter()
+                                    .filter(|client| client.in_lobby == Some(*lobby_id as usize))
+                                    .map(|client| client.player.as_ref().unwrap().username)
+                                    .collect::<Vec<String>>()
+                                    .join(":")
+                                    .as_bytes()
+                            ].concat())?;
+                        }
+                    },
+                    Command::Username => {
+                        if let Ok(username) = String::from_utf8(packet.args.get_range(..)) {
+                            match client.player {
+                                None => client.player = Some(Player::new(username)),
+                                Some(ref mut p) => p.username = username,
+                            };
+                        }
+                    },
                     _ => {},
                 }
             }

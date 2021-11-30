@@ -1,9 +1,7 @@
-pub use server_result::ServerResult;
 use simple_logger::SimpleLogger;
 use log::error;
 use server::Server;
 
-pub mod server_result;
 pub mod client;
 pub mod game;
 

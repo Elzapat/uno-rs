@@ -77,6 +77,7 @@ fn refresh_lobbies_list(
 
 fn settings_panel(
     mut settings: ResMut<Settings>,
+    mut server: ResMut<Server>,
     egui_context: ResMut<EguiContext>,
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
@@ -93,7 +94,7 @@ fn settings_panel(
         ui.horizontal(|ui| {
             ui.label("Username: ");
             if ui.text_edit_singleline(&mut settings.username).lost_focus() {
-                println!("{}", settings.username);
+                write_socket(&mut server.socket, Command::Username, settings.username.as_bytes()).unwrap();
             }
 
             ui.checkbox(&mut settings.enable_animations, "Enable animations");

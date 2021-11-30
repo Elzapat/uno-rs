@@ -2,6 +2,7 @@ pub mod card;
 pub mod deck;
 pub mod player;
 pub mod packet;
+pub mod error;
 
 pub mod prelude {
     pub use crate::{
@@ -9,6 +10,7 @@ pub mod prelude {
         player::*,
         deck::*,
         packet::{ Packet, self },
+        error::{ Error, Result },
     };
 }
 

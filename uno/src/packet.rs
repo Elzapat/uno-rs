@@ -2,25 +2,9 @@ use std::{
     iter::FromIterator,
     ops::RangeBounds,
     net::TcpStream,
-    io::{ Read, Write, self },
+    io::{ Read, Write },
 };
-
-#[derive(Debug)]
-pub enum PacketError {
-    ZeroSizePacket,
-}
-
-impl std::fmt::Display for PacketError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for PacketError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
+use crate::error::{ Result, Error, UnoError };
 
 /// Delimiter between packets
 pub const DELIMITER: u8 = 255;
@@ -40,12 +24,12 @@ pub fn parse_packet(mut packet: Vec<u8>) -> Packet {
     }
 }
 
-pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>, io::Error> {
+pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>> {
     let mut buffer = [0; 32];
     let size = socket.read(&mut buffer)?;
 
     if size < 1 {
-        return Err(io::Error::new(io::ErrorKind::Other, PacketError::ZeroSizePacket));
+        return Err(Error::UnoError(UnoError::Disconnected));
     }
 
     let mut current_packet = Vec::new();
@@ -62,7 +46,7 @@ pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>, io::Error> {
     Ok(packets)
 }
 
-pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Result<(), io::Error>
+pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Result<()>
 where
     A: Into<Args>,
 {
@@ -79,6 +63,8 @@ pub enum Command {
     JoinLobby = 2,
     LeaveLobby = 3,
     LobbiesInfo = 4,
+    LobbyInfo = 5,
+    Username = 6,
     Unknown = 255,
 }
 
@@ -90,6 +76,8 @@ impl From<u8> for Command {
             2 => Command::JoinLobby,
             3 => Command::LeaveLobby,
             4 => Command::LobbiesInfo,
+            5 => Command::LobbyInfo,
+            6 => Command::Username,
             _ => Command::Unknown,
         }
     }
