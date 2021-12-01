@@ -25,7 +25,7 @@ pub fn parse_packet(mut packet: Vec<u8>) -> Packet {
 }
 
 pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>> {
-    let mut buffer = [0; 32];
+    let mut buffer = [0; 128];
     let size = socket.read(&mut buffer)?;
 
     if size < 1 {
@@ -56,7 +56,7 @@ where
 }
 
 /// Command bytes
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Command {
     Error = 0,
     CreateLobby = 1,

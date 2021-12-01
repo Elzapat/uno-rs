@@ -25,14 +25,17 @@ fn new_lobby_id() -> usize {
     COUNTER.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
         Some(value % (MAX_LOBBIES * 2) + 1)
     }).unwrap()
+}
 
+struct Lobby {
+    number_players: usize,
+    players: Vec<String>,
 }
 
 pub struct Server {
     listener: TcpListener,
     clients: Vec<Client>,
-    // lobbies: Vec<Lobby>,
-    lobbies: HashMap<usize, usize>,
+    lobbies: HashMap<usize, Lobby<>>,
     game_threads: Vec<thread::JoinHandle<()>>,
 }
 
@@ -109,7 +112,7 @@ impl Server {
                         if self.lobbies.len() < MAX_LOBBIES {
                             let new_lobby_id = new_lobby_id();
                             write_socket(&mut client.socket, Command::JoinLobby, new_lobby_id as u8)?;
-                            self.lobbies.insert(new_lobby_id, 0);
+                            self.lobbies.insert(new_lobby_id, Lobby { number_players: 0, players: vec![] });
                         } else {
                             write_socket(&mut client.socket, Command::Error, "Maximum lobby amount".as_bytes())?;
                         }
@@ -117,7 +120,7 @@ impl Server {
                     Command::JoinLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if self.lobbies.contains_key(&(*lobby_id as usize)) {
-                                *self.lobbies.get_mut(&(*lobby_id as usize)).unwrap() += 1;
+                                self.lobbies.get_mut(&(*lobby_id as usize)).unwrap().number_players += 1;
                                 write_socket(&mut client.socket, Command::JoinLobby, *lobby_id)?;
                             } else {
                                 write_socket(&mut client.socket, Command::Error, "Lobby doesn't exist".as_bytes())?;
@@ -127,9 +130,9 @@ impl Server {
                     Command::LeaveLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             write_socket(&mut client.socket, Command::LeaveLobby, vec![])?;
-                            if let Some(n) = self.lobbies.get_mut(&(*lobby_id as usize)) {
-                                if *n > 0 {
-                                    *n -= 1;
+                            if let Some(lobby) = self.lobbies.get_mut(&(*lobby_id as usize)) {
+                                if lobby.number_players > 0 {
+                                    lobby.number_players -= 1;
                                 }
                             }
                         }
@@ -137,25 +140,25 @@ impl Server {
                     Command::LobbiesInfo => {
                         let mut infos = vec![];
 
-                        for (id, n_players) in &self.lobbies {
+                        for (id, lobby) in &self.lobbies {
                             infos.push(*id as u8);
-                            infos.push(*n_players as u8);
+                            infos.push(lobby.number_players as u8);
                         }
 
                         write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
                     },
                     Command::LobbyInfo => {
                         if let Some(lobby_id) = packet.args.get(0) {
-                            write_socket(&mut client.socket, Command::LobbyInfo, [
-                                &[*lobby_id, self.lobbies[&(*lobby_id as usize)] as u8],
-                                self.clients.clone()
-                                    .iter()
-                                    .filter(|client| client.in_lobby == Some(*lobby_id as usize))
-                                    .map(|client| client.player.as_ref().unwrap().username)
-                                    .collect::<Vec<String>>()
-                                    .join(":")
-                                    .as_bytes()
-                            ].concat())?;
+                            if let Some(lobby) = self.lobbies.get(&(*lobby_id as usize)) {
+                                write_socket(&mut client.socket, Command::LobbyInfo, [
+                                    &[*lobby_id, self.lobbies[&(*lobby_id as usize)].number_players as u8],
+                                    &lobby
+                                        .players
+                                        .iter()
+                                        .map(|player_ptr| *player_ptr)
+                                        .collect()
+                                ].concat())?;
+                            }
                         }
                     },
                     Command::Username => {

@@ -7,7 +7,7 @@ use std::{
 #[derive(Debug)]
 pub struct Client {
     pub socket: TcpStream,
-    pub incoming_packets: <Vec<Cell<packet::Packet>>>,
+    pub incoming_packets: Vec<packet::Packet>,
     pub in_lobby: Option<usize>,
     pub player: Option<Player>,
 }

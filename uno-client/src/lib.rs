@@ -14,7 +14,7 @@ fn main() {
 #[wasm_bindgen]
 pub fn run() {
     let mut app = App::build();
-    
+
     app.add_plugins(DefaultPlugins);
 
     // when building for Web, use WebGL2 rendering
