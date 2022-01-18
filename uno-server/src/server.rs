@@ -1,19 +1,14 @@
-use log::{ error, info };
+use crate::{client::Client, game::Game};
+use log::{error, info};
 use std::{
-    net::TcpListener,
-    thread,
-    sync::atomic::{ AtomicUsize, Ordering },
     collections::HashMap,
-};
-use crate::{
-    client::Client,
-    game::Game,
+    net::TcpListener,
+    sync::atomic::{AtomicUsize, Ordering},
+    thread,
 };
 use uno::{
+    packet::{read_socket, write_socket, Command, ARG_DELIMITER},
     prelude::*,
-    packet::{
-        Command, read_socket, write_socket,
-    },
 };
 
 const MAX_LOBBY_PLAYERS: usize = 10;
@@ -22,9 +17,11 @@ const MAX_LOBBIES: usize = 10;
 fn new_lobby_id() -> usize {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-    COUNTER.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-        Some(value % (MAX_LOBBIES * 2) + 1)
-    }).unwrap()
+    COUNTER
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            Some(value % (MAX_LOBBIES * 2) + 1)
+        })
+        .unwrap()
 }
 
 struct Lobby {
@@ -35,7 +32,7 @@ struct Lobby {
 pub struct Server {
     listener: TcpListener,
     clients: Vec<Client>,
-    lobbies: HashMap<usize, Lobby<>>,
+    lobbies: HashMap<usize, Lobby>,
     game_threads: Vec<thread::JoinHandle<()>>,
 }
 
@@ -66,8 +63,8 @@ impl Server {
                 socket.set_nonblocking(true)?;
                 self.clients.push(Client::new(socket));
                 info!("New connection: {}", ip);
-            },
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {},
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => error!("{}", e),
         };
 
@@ -79,13 +76,16 @@ impl Server {
 
         for (i, client) in self.clients.iter_mut().enumerate() {
             client.incoming_packets = match read_socket(&mut client.socket) {
-                Ok(packets) => { info!("{:?}", packets); packets },
+                Ok(packets) => {
+                    info!("{:?}", packets);
+                    packets
+                }
                 Err(e) => {
                     if let Error::IoError(e) = e {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
                             continue;
                         } else {
-                            return Err(Error::IoError(e))
+                            return Err(Error::IoError(e));
                         }
                     } else if let Error::UnoError(uno::error::UnoError::Disconnected) = e {
                         to_remove = Some(i);
@@ -111,22 +111,43 @@ impl Server {
                     Command::CreateLobby => {
                         if self.lobbies.len() < MAX_LOBBIES {
                             let new_lobby_id = new_lobby_id();
-                            write_socket(&mut client.socket, Command::JoinLobby, new_lobby_id as u8)?;
-                            self.lobbies.insert(new_lobby_id, Lobby { number_players: 0, players: vec![] });
+                            write_socket(
+                                &mut client.socket,
+                                Command::JoinLobby,
+                                new_lobby_id as u8,
+                            )?;
+                            self.lobbies.insert(
+                                new_lobby_id,
+                                Lobby {
+                                    number_players: 0,
+                                    players: vec![],
+                                },
+                            );
                         } else {
-                            write_socket(&mut client.socket, Command::Error, "Maximum lobby amount".as_bytes())?;
+                            write_socket(
+                                &mut client.socket,
+                                Command::Error,
+                                "Maximum lobby amount".as_bytes(),
+                            )?;
                         }
-                    },
+                    }
                     Command::JoinLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if self.lobbies.contains_key(&(*lobby_id as usize)) {
-                                self.lobbies.get_mut(&(*lobby_id as usize)).unwrap().number_players += 1;
+                                self.lobbies
+                                    .get_mut(&(*lobby_id as usize))
+                                    .unwrap()
+                                    .number_players += 1;
                                 write_socket(&mut client.socket, Command::JoinLobby, *lobby_id)?;
                             } else {
-                                write_socket(&mut client.socket, Command::Error, "Lobby doesn't exist".as_bytes())?;
+                                write_socket(
+                                    &mut client.socket,
+                                    Command::Error,
+                                    "Lobby doesn't exist".as_bytes(),
+                                )?;
                             }
                         }
-                    },
+                    }
                     Command::LeaveLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             write_socket(&mut client.socket, Command::LeaveLobby, vec![])?;
@@ -136,7 +157,7 @@ impl Server {
                                 }
                             }
                         }
-                    },
+                    }
                     Command::LobbiesInfo => {
                         let mut infos = vec![];
 
@@ -146,21 +167,34 @@ impl Server {
                         }
 
                         write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
-                    },
+                    }
                     Command::LobbyInfo => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if let Some(lobby) = self.lobbies.get(&(*lobby_id as usize)) {
-                                write_socket(&mut client.socket, Command::LobbyInfo, [
-                                    &[*lobby_id, self.lobbies[&(*lobby_id as usize)].number_players as u8],
-                                    &lobby
-                                        .players
-                                        .iter()
-                                        .map(|player_ptr| *player_ptr)
-                                        .collect()
-                                ].concat())?;
+                                let players = lobby
+                                    .players
+                                    .iter()
+                                    .flat_map(|player| {
+                                        [player[..].as_bytes(), &[ARG_DELIMITER]].concat()
+                                    })
+                                    .collect::<Vec<u8>>();
+
+                                write_socket(
+                                    &mut client.socket,
+                                    Command::LobbyInfo,
+                                    [
+                                        &[
+                                            *lobby_id,
+                                            self.telobbies[&(*lobby_id as usize)].number_players
+                                                as u8,
+                                        ],
+                                        &players[..],
+                                    ]
+                                    .concat(),
+                                )?;
                             }
                         }
-                    },
+                    }
                     Command::Username => {
                         if let Ok(username) = String::from_utf8(packet.args.get_range(..)) {
                             match client.player {
@@ -168,8 +202,8 @@ impl Server {
                                 Some(ref mut p) => p.username = username,
                             };
                         }
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
             }
         }

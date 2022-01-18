@@ -1,13 +1,14 @@
+use crate::error::{Error, Result, UnoError};
 use std::{
+    io::{Read, Write},
     iter::FromIterator,
-    ops::RangeBounds,
     net::TcpStream,
-    io::{ Read, Write },
+    ops::RangeBounds,
 };
-use crate::error::{ Result, Error, UnoError };
 
 /// Delimiter between packets
-pub const DELIMITER: u8 = 255;
+pub const PACKET_DELIMITER: u8 = 255;
+pub const ARG_DELIMITER: u8 = 254;
 
 /// Represents a fully parsed packet
 #[derive(Clone, Debug)]
@@ -36,7 +37,7 @@ pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>> {
     let mut packets = Vec::new();
 
     for i in 0..size {
-        if DELIMITER == buffer[i] {
+        if PACKET_DELIMITER == buffer[i] {
             packets.push(parse_packet(current_packet.drain(..).collect()));
         } else {
             current_packet.push(buffer[i]);
@@ -50,7 +51,14 @@ pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Res
 where
     A: Into<Args>,
 {
-    socket.write(&[&[command as u8], args.into().as_slice(), &[DELIMITER]].concat())?;
+    socket.write(
+        &[
+            &[command as u8],
+            args.into().as_slice(),
+            &[PACKET_DELIMITER],
+        ]
+        .concat(),
+    )?;
 
     Ok(())
 }
