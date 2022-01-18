@@ -20,27 +20,29 @@ struct Lobby {
     number_players: u8,
 }
 
+#[derive(Component)]
 struct Error {
     message: String,
     timer: Timer,
 }
 
+#[derive(Component)]
 pub struct RefreshTimer(Timer);
 
 impl Plugin for MenuPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
             .insert_resource(RefreshTimer(Timer::from_seconds(1.0, true)))
             .add_state(LobbyState::LobbiesList)
             .add_system_set(
                 SystemSet::on_enter(LobbyState::LobbiesList)
-                    .with_system(refresh_lobbies_list.system())
+                    .with_system(refresh_lobbies_list)
             )
-            .add_system(settings_panel.system())
-            .add_system(read_incoming.system())
-            .add_system(refresh_lobbies_list.system())
-            .add_system(display_error.system())
-            .add_system(lobby_panel.system());
+            .add_system(settings_panel)
+            .add_system(read_incoming)
+            .add_system(refresh_lobbies_list)
+            .add_system(display_error)
+            .add_system(lobby_panel);
     }
 }
 
@@ -171,7 +173,7 @@ fn lobby_panel(
             });
 
             ui.separator();
-            egui::ScrollArea::from_max_height(400.0).show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
                 ui.vertical(|ui| {
                     for lobby in &lobbies.0 {
                         ui.add_space(10.0);

@@ -4,10 +4,10 @@ use bevy::render::camera::Camera;
 pub struct CursorStatePlugin;
 
 impl Plugin for CursorStatePlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app
-            .add_startup_system(setup.system())
-            .add_system(cursor_state.system());
+            .add_startup_system(setup)
+            .add_system(cursor_state);
     }
 }
 
@@ -30,7 +30,7 @@ fn cursor_state(
 ) {
     for cursor in cursor_moved.iter() {
         let window = windows.get_primary().unwrap();
-        let cam_transform = query_camera.single().unwrap();
+        let cam_transform = query_camera.single();
         cursor_state.cursor_world = cursor_to_world(window, cam_transform, cursor.position);
 
         cursor_state.delta = cursor_state.delta + (cursor_state.cursor_world - cursor_state.last_position);

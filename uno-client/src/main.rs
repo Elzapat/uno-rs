@@ -10,7 +10,8 @@ use drag_and_drop::*;
 use cursor_state::*;
 use menu::MenuPlugin;
 
-pub struct Size {
+#[derive(Component)]
+pub struct SpriteSize {
     width: f32,
     height: f32,
 }
@@ -25,15 +26,15 @@ pub struct Server {
 }
 
 fn main() {
-    App::build()
+    App::new()
         .insert_resource(Server { socket: TcpStream::connect("127.0.0.1:2905").unwrap() })
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(CursorStatePlugin)
         .add_plugin(DragAndDropPlugin)
         .add_plugin(MenuPlugin)
-        .add_startup_system(setup.system())
-        // .add_system(animate_sprite_system.system())
+        .add_startup_system(setup)
+        // .add_system(animate_sprite_system)
         .insert_resource(Settings { username: String::from(""), enable_animations: true })
         .run();
 }
@@ -47,7 +48,7 @@ fn animate_sprite_system(
         timer.tick(time.delta());
         if timer.finished() {
             let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap();
-            sprite.index = ((sprite.index as usize + 1) % texture_atlas.textures.len()) as u32;
+            sprite.index = (sprite.index as usize + 1) % texture_atlas.textures.len();
         }
     }
 }
@@ -77,15 +78,15 @@ fn setup(
         })
         .insert(Timer::from_seconds(0.5, true))
         .insert(Draggable)
-        .insert(Size { width: SPRITE_WIDTH, height: SPRITE_HEIGHT });
+        .insert(SpriteSize { width: SPRITE_WIDTH, height: SPRITE_HEIGHT });
 
     let texture_handle = asset_server.load("dirt.png");
     commands
         .spawn_bundle(SpriteBundle {
-            material: materials.add(texture_handle.into()),
+            texture: texture_handle,
             transform: Transform::from_scale(Vec3::splat(0.5)),
             ..Default::default()
         })
         .insert(Draggable)
-        .insert(Size { width: 512.0 * 0.5, height: 512.0 * 0.5 });
+        .insert(SpriteSize { width: 512.0 * 0.5, height: 512.0 * 0.5 });
 }

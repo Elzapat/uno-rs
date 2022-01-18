@@ -1,11 +1,16 @@
 use bevy::prelude::*;
 use wasm_bindgen::prelude::*;
+use drag_and_drop::*;
+use cursor_state::*;
 
 pub mod cursor_state;
 pub mod drag_and_drop;
 
-use drag_and_drop::*;
-use cursor_state::*;
+#[derive(Component)]
+pub struct SpriteSize {
+    width: f32,
+    height: f32,
+}
 
 fn main() {
     crate::run();
@@ -13,7 +18,7 @@ fn main() {
 
 #[wasm_bindgen]
 pub fn run() {
-    let mut app = App::build();
+    let mut app = App::new();
 
     app.add_plugins(DefaultPlugins);
 
@@ -22,8 +27,8 @@ pub fn run() {
     app.add_plugin(bevy_webgl2::WebGL2Plugin);
     app.add_plugin(DragAndDropPlugin);
     app.add_plugin(CursorStatePlugin);
-    app.add_startup_system(setup.system());
-    app.add_system(animate_sprite_system.system());
+    app.add_startup_system(setup);
+    app.add_system(animate_sprite_system);
 
     app.run();
 }
@@ -37,7 +42,7 @@ fn animate_sprite_system(
         timer.tick(time.delta());
         if timer.finished() {
             let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap();
-            sprite.index = ((sprite.index as usize + 1) % texture_atlas.textures.len()) as u32;
+            sprite.index = (sprite.index as usize + 1) % texture_atlas.textures.len();
         }
     }
 }
@@ -66,14 +71,13 @@ fn setup(
     //     .insert(Draggable)
     //     .insert(Size { width: SPRITE_WIDTH, height: SPRITE_HEIGHT });
 
-    let texture_handle = asset_server.load("dirt.png");
     commands
         .spawn_bundle(SpriteBundle {
-            material: materials.add(texture_handle.into()),
+            texture: asset_server.load("dirt.png"),
             transform: Transform::from_scale(Vec3::splat(0.5)),
             ..Default::default()
         })
         .insert(Draggable)
         // .insert(Hoverable)
-        .insert(Size { width: 512.0, height: 512.0 });
+        .insert(SpriteSize { width: 512.0, height: 512.0 });
 }

@@ -1,28 +1,33 @@
 use bevy::prelude::*;
-use crate::cursor_state::*;
-use crate::Size;
+use crate::{
+    cursor_state::*,
+    SpriteSize,
+};
 
 pub struct DragAndDropPlugin;
 
 impl Plugin for DragAndDropPlugin {
-    fn build(&self, app: &mut AppBuilder) {
+    fn build(&self, app: &mut App) {
         app
             // .add_system(hoverable.system())
             .insert_resource(CursorState::default())
-            .add_system(start_drag.system())
-            .add_system(drag.system());
+            .add_system(start_drag)
+            .add_system(drag);
     }
 }
 
+#[derive(Component)]
 pub struct Draggable;
+#[derive(Component)]
 pub struct Dragged;
+#[derive(Component)]
 pub struct Dropped;
 
 fn start_drag(
     mut commands: Commands,
     mouse_button: Res<Input<MouseButton>>,
     mut cursor_state: ResMut<CursorState>,
-    query_pressed: Query<(Entity, &Transform, &Size), With<Draggable>>,
+    query_pressed: Query<(Entity, &Transform, &SpriteSize), With<Draggable>>,
     query_released: Query<Entity, With<Dragged>>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
@@ -54,7 +59,7 @@ fn drag(
     mut query_dragged: Query<&mut Transform, With<Dragged>>,
 ) {
     for mut transform in query_dragged.iter_mut() {
-        transform.translation += (cursor_state.delta, 0.0).into();
+        transform.translation += Vec3::new(cursor_state.delta.x, cursor_state.delta.y, 0.0);
         cursor_state.delta = Vec2::new(0.0, 0.0);
     }
 }
