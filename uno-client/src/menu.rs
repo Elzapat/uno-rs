@@ -1,9 +1,9 @@
+use crate::{Server, Settings};
+use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
-use bevy_egui::{ egui, EguiContext };
-use crate::{ Settings, Server };
-use uno::packet::{
-    Command, write_socket, read_socket,
-};
+use bevy_egui::{egui, EguiContext};
+use std::net::TcpStream;
+use uno::packet::{read_socket, write_socket, Command};
 
 pub struct MenuPlugin;
 
@@ -11,6 +11,7 @@ pub struct MenuPlugin;
 enum LobbyState {
     InLobby(Lobby),
     LobbiesList,
+    Unconnected,
 }
 struct LobbiesList(Vec<Lobby>);
 
@@ -23,7 +24,6 @@ struct Lobby {
 #[derive(Component)]
 struct Error {
     message: String,
-    timer: Timer,
 }
 
 #[derive(Component)]
@@ -33,35 +33,85 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
             .insert_resource(RefreshTimer(Timer::from_seconds(1.0, true)))
-            .add_state(LobbyState::LobbiesList)
+            .add_startup_system(connect_to_server)
+            .add_state(LobbyState::Unconnected)
             .add_system_set(
                 SystemSet::on_enter(LobbyState::LobbiesList)
-                    .with_system(refresh_lobbies_list)
+                    .with_run_criteria(run_if_connected)
+                    .with_system(refresh_lobbies_list),
             )
-            .add_system(settings_panel)
-            .add_system(read_incoming)
-            .add_system(refresh_lobbies_list)
-            .add_system(display_error)
-            .add_system(lobby_panel);
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_connected)
+                    .with_system(settings_panel)
+                    .with_system(read_incoming)
+                    .with_system(lobby_panel),
+            )
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_not_connected)
+                    .with_system(unconnected_panel),
+            )
+            .add_system(display_error);
     }
+}
+
+fn run_if_connected(state: Res<State<LobbyState>>) -> ShouldRun {
+    if state.current() != &LobbyState::Unconnected {
+        ShouldRun::Yes
+    } else {
+        ShouldRun::No
+    }
+}
+
+fn run_if_not_connected(state: Res<State<LobbyState>>) -> ShouldRun {
+    if state.current() == &LobbyState::Unconnected {
+        ShouldRun::Yes
+    } else {
+        ShouldRun::No
+    }
+}
+
+fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbyState>>) {
+    let socket = match TcpStream::connect("127.0.0.1:2905") {
+        Ok(s) => s,
+        Err(e) => {
+            commands.spawn().insert(Error {
+                message: format!("Couldn't connect to server ({}).\n\nYou can try reconnecting, or try another time because the service might be down.", e),
+            });
+            return;
+        }
+    };
+
+    socket
+        .set_nonblocking(true)
+        .expect("Couldn't set socket to nonblocking");
+    state.set(LobbyState::LobbiesList).unwrap();
+    commands.insert_resource(Server { socket });
 }
 
 fn display_error(
     mut commands: Commands,
-    time: Res<Time>,
     egui_context: ResMut<EguiContext>,
-    mut query: Query<(Entity, &mut Error)>
+    mut query: Query<(Entity, &mut Error)>,
 ) {
-    for (entity, mut error) in query.iter_mut() {
-        error.timer.tick(time.delta());
-
-        egui::show_tooltip(egui_context.ctx(), egui::Id::new("Error"), |ui| {
-            ui.label(&error.message);
+    for (entity, error) in query.iter_mut() {
+        egui::Window::new(
+            egui::RichText::new("Error")
+                .strong()
+                .color(egui::Color32::RED),
+        )
+        .collapsible(false)
+        .resizable(false)
+        .show(egui_context.ctx(), |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading(&error.message);
+                ui.add_space(10.0);
+                if ui.button("Ok").clicked() {
+                    commands.entity(entity).despawn();
+                }
+            });
         });
-
-        if error.timer.finished() {
-            commands.entity(entity).despawn();
-        }
     }
 }
 
@@ -84,11 +134,7 @@ fn settings_panel(
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
         ui.vertical_centered(|ui| {
-            ui.add(
-                egui::Label::new("Settings")
-                    .text_style(egui::TextStyle::Heading)
-                    .strong()
-            );
+            ui.label(egui::RichText::new("Settings").heading().strong());
         });
 
         ui.separator();
@@ -96,7 +142,12 @@ fn settings_panel(
         ui.horizontal(|ui| {
             ui.label("Username: ");
             if ui.text_edit_singleline(&mut settings.username).lost_focus() {
-                write_socket(&mut server.socket, Command::Username, settings.username.as_bytes()).unwrap();
+                write_socket(
+                    &mut server.socket,
+                    Command::Username,
+                    settings.username.as_bytes(),
+                )
+                .unwrap();
             }
 
             ui.checkbox(&mut settings.enable_animations, "Enable animations");
@@ -116,14 +167,16 @@ fn read_incoming(
             info!("{:?}", packet);
             match packet.command {
                 Command::JoinLobby => {
-                    lobby_state.set(LobbyState::InLobby(Lobby {
-                        id: *packet.args.get(0).unwrap(),
-                        number_players: 1,
-                    })).unwrap();
-                },
+                    lobby_state
+                        .set(LobbyState::InLobby(Lobby {
+                            id: *packet.args.get(0).unwrap(),
+                            number_players: 1,
+                        }))
+                        .unwrap();
+                }
                 Command::LeaveLobby => {
                     lobby_state.set(LobbyState::LobbiesList).unwrap();
-                },
+                }
                 Command::LobbiesInfo => {
                     if let LobbyState::LobbiesList = lobby_state.current() {
                         lobbies.0.drain(..);
@@ -135,16 +188,13 @@ fn read_incoming(
                             });
                         }
                     }
-                },
+                }
                 Command::Error => {
                     if let Ok(error) = String::from_utf8(packet.args.get_range(..)) {
-                        commands.spawn().insert(Error {
-                            message: error,
-                            timer: Timer::from_seconds(5.0, false),
-                        });
+                        commands.spawn().insert(Error { message: error });
                     }
                 }
-                _ => {},
+                _ => {}
             };
         }
     }
@@ -155,14 +205,11 @@ fn lobby_panel(
     mut server: ResMut<Server>,
     egui_context: Res<EguiContext>,
     settings: Res<Settings>,
-    lobby_state: Res<State<LobbyState>>,
+    lobby_state: ResMut<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
 ) {
     let window = egui::Window::new("Uno")
-        // .fixed_size([400.0, 400.0])
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        // .default_height(400.0)
-        // .min_width(400.0)
         .collapsible(false)
         .resizable(false);
 
@@ -173,31 +220,39 @@ fn lobby_panel(
             });
 
             ui.separator();
-            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-                ui.vertical(|ui| {
-                    for lobby in &lobbies.0 {
-                        ui.add_space(10.0);
-                        ui.group(|ui| {
-                            ui.heading(format!("Lobby #{}", lobby.id));
-                            ui.separator();
-                            ui.horizontal(|ui| {
-                                ui.label(format!("{}/10", lobby.number_players));
-                                if ui.button("Join Lobby").clicked() {
-                                    if settings.username.trim().is_empty() {
-                                        commands.spawn().insert(Error {
-                                            message: "Please enter a username before joining a lobby".to_owned(),
-                                            timer: Timer::from_seconds(3.0, false),
-                                        });
-                                    } else {
-                                        write_socket(&mut server.socket, Command::JoinLobby, lobby.id).unwrap();
+            egui::ScrollArea::vertical()
+                .max_height(400.0)
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        for lobby in &lobbies.0 {
+                            ui.add_space(10.0);
+                            ui.group(|ui| {
+                                ui.heading(format!("Lobby #{}", lobby.id));
+                                ui.separator();
+                                ui.horizontal(|ui| {
+                                    ui.label(format!("{}/10", lobby.number_players));
+                                    if ui.button("Join Lobby").clicked() {
+                                        if settings.username.trim().is_empty() {
+                                            commands.spawn().insert(Error {
+                                                message:
+                                                    "Please enter a username before joining a lobby"
+                                                        .to_owned(),
+                                            });
+                                        } else {
+                                            write_socket(
+                                                &mut server.socket,
+                                                Command::JoinLobby,
+                                                lobby.id,
+                                            )
+                                            .unwrap();
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
-                    }
-                    ui.add_space(10.0);
+                        }
+                        ui.add_space(10.0);
+                    });
                 });
-            });
             ui.separator();
 
             ui.vertical_centered(|ui| {
@@ -205,7 +260,6 @@ fn lobby_panel(
                     if settings.username.trim().is_empty() {
                         commands.spawn().insert(Error {
                             message: "Please enter a username before creating a lobby".to_owned(),
-                            timer: Timer::from_seconds(3.0, false),
                         });
                     } else {
                         write_socket(&mut server.socket, Command::CreateLobby, vec![]).unwrap();
@@ -226,5 +280,28 @@ fn lobby_panel(
                 }
             });
         }),
+        _ => window.show(egui_context.ctx(), |ui| {
+            ui.label("This window isn't supposed to show");
+        }),
     };
+}
+
+fn unconnected_panel(
+    commands: Commands,
+    egui_context: Res<EguiContext>,
+    lobby_state: ResMut<State<LobbyState>>,
+) {
+    egui::Window::new("Unconnected")
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .collapsible(false)
+        .resizable(false)
+        .show(egui_context.ctx(), |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading("You're not connected to the server");
+                ui.add_space(10.0);
+                if ui.button("Reconnect").clicked() {
+                    connect_to_server(commands, lobby_state);
+                }
+            });
+        });
 }

@@ -1,6 +1,6 @@
-use simple_logger::SimpleLogger;
 use log::error;
 use server::Server;
+use simple_logger::SimpleLogger;
 
 pub mod client;
 pub mod game;

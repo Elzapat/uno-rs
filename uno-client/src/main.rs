@@ -6,8 +6,8 @@ pub mod cursor_state;
 pub mod drag_and_drop;
 mod menu;
 
-use drag_and_drop::*;
 use cursor_state::*;
+use drag_and_drop::*;
 use menu::MenuPlugin;
 
 #[derive(Component)]
@@ -21,13 +21,13 @@ pub struct Settings {
     enable_animations: bool,
 }
 
+#[derive(Debug)]
 pub struct Server {
     socket: TcpStream,
 }
 
 fn main() {
     App::new()
-        .insert_resource(Server { socket: TcpStream::connect("127.0.0.1:2905").unwrap() })
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(CursorStatePlugin)
@@ -35,7 +35,10 @@ fn main() {
         .add_plugin(MenuPlugin)
         .add_startup_system(setup)
         // .add_system(animate_sprite_system)
-        .insert_resource(Settings { username: String::from(""), enable_animations: true })
+        .insert_resource(Settings {
+            username: String::from(""),
+            enable_animations: true,
+        })
         .run();
 }
 
@@ -55,20 +58,22 @@ fn animate_sprite_system(
 
 fn setup(
     mut commands: Commands,
-    mut server: ResMut<Server>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    server.socket.set_nonblocking(true).unwrap();
-
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     const SPRITE_WIDTH: f32 = 4860.0 / 10.0;
     const SPRITE_HEIGHT: f32 = 4554.0 / 6.0;
 
     let texture_handle = asset_server.load("cards_a_03.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(SPRITE_WIDTH, SPRITE_HEIGHT), 10, 6);
+    let texture_atlas = TextureAtlas::from_grid(
+        texture_handle,
+        Vec2::new(SPRITE_WIDTH, SPRITE_HEIGHT),
+        10,
+        6,
+    );
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -78,7 +83,10 @@ fn setup(
         })
         .insert(Timer::from_seconds(0.5, true))
         .insert(Draggable)
-        .insert(SpriteSize { width: SPRITE_WIDTH, height: SPRITE_HEIGHT });
+        .insert(SpriteSize {
+            width: SPRITE_WIDTH,
+            height: SPRITE_HEIGHT,
+        });
 
     let texture_handle = asset_server.load("dirt.png");
     commands
@@ -88,5 +96,8 @@ fn setup(
             ..Default::default()
         })
         .insert(Draggable)
-        .insert(SpriteSize { width: 512.0 * 0.5, height: 512.0 * 0.5 });
+        .insert(SpriteSize {
+            width: 512.0 * 0.5,
+            height: 512.0 * 0.5,
+        });
 }

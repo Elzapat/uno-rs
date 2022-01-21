@@ -171,27 +171,17 @@ impl Server {
                     Command::LobbyInfo => {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if let Some(lobby) = self.lobbies.get(&(*lobby_id as usize)) {
-                                let players = lobby
-                                    .players
-                                    .iter()
-                                    .flat_map(|player| {
-                                        [player[..].as_bytes(), &[ARG_DELIMITER]].concat()
-                                    })
-                                    .collect::<Vec<u8>>();
+                                let mut args = vec![
+                                    *lobby_id,
+                                    self.lobbies[&(*lobby_id as usize)].number_players as u8,
+                                ];
 
-                                write_socket(
-                                    &mut client.socket,
-                                    Command::LobbyInfo,
-                                    [
-                                        &[
-                                            *lobby_id,
-                                            self.telobbies[&(*lobby_id as usize)].number_players
-                                                as u8,
-                                        ],
-                                        &players[..],
-                                    ]
-                                    .concat(),
-                                )?;
+                                for player in &lobby.players {
+                                    args.extend_from_slice(player.as_bytes());
+                                    args.push(ARG_DELIMITER);
+                                }
+
+                                write_socket(&mut client.socket, Command::LobbyInfo, args)?;
                             }
                         }
                     }
