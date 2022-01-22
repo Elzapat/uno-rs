@@ -111,11 +111,13 @@ impl Server {
                     Command::CreateLobby => {
                         if self.lobbies.len() < MAX_LOBBIES {
                             let new_lobby_id = new_lobby_id();
+                            /*
                             write_socket(
                                 &mut client.socket,
                                 Command::JoinLobby,
                                 new_lobby_id as u8,
                             )?;
+                            */
                             self.lobbies.insert(
                                 new_lobby_id,
                                 Lobby {
@@ -133,12 +135,22 @@ impl Server {
                     }
                     Command::JoinLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
-                            if self.lobbies.contains_key(&(*lobby_id as usize)) {
-                                self.lobbies
-                                    .get_mut(&(*lobby_id as usize))
-                                    .unwrap()
-                                    .number_players += 1;
-                                write_socket(&mut client.socket, Command::JoinLobby, *lobby_id)?;
+                            if let Some(ref mut lobby) = self.lobbies.get_mut(&(*lobby_id as usize))
+                            {
+                                lobby.number_players += 1;
+                                lobby.players.push(match &client.player {
+                                    Some(p) => p.username.clone(),
+                                    None => "Player".to_owned(),
+                                });
+
+                                let mut args = vec![*lobby_id];
+
+                                for player in &lobby.players {
+                                    args.extend_from_slice(player.as_bytes());
+                                    args.push(ARG_DELIMITER);
+                                }
+
+                                write_socket(&mut client.socket, Command::JoinLobby, args)?;
                             } else {
                                 write_socket(
                                     &mut client.socket,

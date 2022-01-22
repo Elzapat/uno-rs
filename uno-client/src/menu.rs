@@ -3,13 +3,13 @@ use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use std::net::TcpStream;
-use uno::packet::{read_socket, write_socket, Command};
+use uno::packet::{read_socket, write_socket, Command, ARG_DELIMITER};
 
 pub struct MenuPlugin;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum LobbyState {
-    InLobby(Lobby),
+    InLobby,
     LobbiesList,
     Unconnected,
 }
@@ -19,6 +19,7 @@ struct LobbiesList(Vec<Lobby>);
 struct Lobby {
     id: u8,
     number_players: u8,
+    players: Vec<String>,
 }
 
 #[derive(Component)]
@@ -32,6 +33,7 @@ pub struct RefreshTimer(Timer);
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
+            .insert_resource(Option::<Lobby>::None)
             .insert_resource(RefreshTimer(Timer::from_seconds(1.0, true)))
             .add_startup_system(connect_to_server)
             .add_state(LobbyState::Unconnected)
@@ -160,6 +162,7 @@ fn read_incoming(
     mut server: ResMut<Server>,
     mut lobby_state: ResMut<State<LobbyState>>,
     mut lobbies: ResMut<LobbiesList>,
+    mut current_lobby: ResMut<Option<Lobby>>,
 ) {
     if let Ok(packets) = read_socket(&mut server.socket) {
         // println!("{:?}", packets);
@@ -167,12 +170,21 @@ fn read_incoming(
             info!("{:?}", packet);
             match packet.command {
                 Command::JoinLobby => {
-                    lobby_state
-                        .set(LobbyState::InLobby(Lobby {
-                            id: *packet.args.get(0).unwrap(),
-                            number_players: 1,
-                        }))
-                        .unwrap();
+                    let players = packet
+                        .args
+                        .get_range(1..)
+                        .clone()
+                        .split(|&x| x == ARG_DELIMITER)
+                        .map(|p| String::from_utf8(p.to_vec()).unwrap())
+                        .collect::<Vec<String>>();
+
+                    lobby_state.set(LobbyState::InLobby).unwrap();
+
+                    *current_lobby = Some(Lobby {
+                        id: *packet.args.get(0).unwrap(),
+                        number_players: 1,
+                        players,
+                    });
                 }
                 Command::LeaveLobby => {
                     lobby_state.set(LobbyState::LobbiesList).unwrap();
@@ -185,7 +197,18 @@ fn read_incoming(
                             lobbies.0.push(Lobby {
                                 id: lobbies_raw[i],
                                 number_players: lobbies_raw[i + 1],
+                                players: Vec::new(),
                             });
+                        }
+                    }
+                }
+                Command::LobbyInfo => {
+                    if let LobbyState::InLobby = lobby_state.current() {
+                        if let Ok(players_raw) = String::from_utf8(packet.args.get_range(2..)) {
+                            let _players = players_raw
+                                .split(char::from_digit(ARG_DELIMITER.into(), 10).unwrap())
+                                .map(|p| p.to_owned())
+                                .collect::<Vec<String>>();
                         }
                     }
                 }
@@ -207,6 +230,7 @@ fn lobby_panel(
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
+    current_lobby: Res<Option<Lobby>>,
 ) {
     let window = egui::Window::new("Uno")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -267,13 +291,19 @@ fn lobby_panel(
                 }
             });
         }),
-        LobbyState::InLobby(lobby) => window.show(egui_context.ctx(), |ui| {
+        LobbyState::InLobby => window.show(egui_context.ctx(), |ui| {
+            let lobby = current_lobby.as_ref().as_ref().unwrap();
+
             ui.vertical_centered(|ui| {
                 ui.heading(format!("Lobby #{}", lobby.id));
             });
 
             ui.separator();
+            for player in &lobby.players {
+                ui.label(player);
+            }
             ui.separator();
+
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
                     write_socket(&mut server.socket, Command::LeaveLobby, lobby.id).unwrap();

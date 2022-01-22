@@ -60,7 +60,6 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
