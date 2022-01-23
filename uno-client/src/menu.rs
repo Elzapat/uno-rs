@@ -2,8 +2,10 @@ use crate::{Server, Settings};
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
+use itertools::Itertools;
 use std::net::TcpStream;
 use uno::packet::{read_socket, write_socket, Command, ARG_DELIMITER};
+use uuid::Uuid;
 
 pub struct MenuPlugin;
 
@@ -19,7 +21,7 @@ struct LobbiesList(Vec<Lobby>);
 struct Lobby {
     id: u8,
     number_players: u8,
-    players: Vec<String>,
+    players: Vec<(Uuid, String)>,
 }
 
 #[derive(Component)]
@@ -29,6 +31,10 @@ struct Error {
 
 #[derive(Component)]
 pub struct RefreshTimer(Timer);
+
+struct Player {
+    id: Uuid,
+}
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
@@ -103,6 +109,7 @@ fn display_error(
                 .strong()
                 .color(egui::Color32::RED),
         )
+        .anchor(egui::Align2::CENTER_TOP, [0.0, 100.0])
         .collapsible(false)
         .resizable(false)
         .show(egui_context.ctx(), |ui| {
@@ -143,7 +150,7 @@ fn settings_panel(
 
         ui.horizontal(|ui| {
             ui.label("Username: ");
-            if ui.text_edit_singleline(&mut settings.username).lost_focus() {
+            if ui.text_edit_singleline(&mut settings.username).changed() {
                 write_socket(
                     &mut server.socket,
                     Command::Username,
@@ -175,8 +182,14 @@ fn read_incoming(
                         .get_range(1..)
                         .clone()
                         .split(|&x| x == ARG_DELIMITER)
-                        .map(|p| String::from_utf8(p.to_vec()).unwrap())
-                        .collect::<Vec<String>>();
+                        .tuples()
+                        .map(|(id, username)| {
+                            (
+                                Uuid::from_slice(id).unwrap(),
+                                String::from_utf8(username.to_vec()).unwrap(),
+                            )
+                        })
+                        .collect::<Vec<(Uuid, String)>>();
 
                     lobby_state.set(LobbyState::InLobby).unwrap();
 
@@ -186,20 +199,46 @@ fn read_incoming(
                         players,
                     });
                 }
+                Command::PlayerJoinedLobby => {
+                    if let LobbyState::InLobby = lobby_state.current() {
+                        let args = packet.args.get_range(..);
+                        let delim_pos = args.iter().position(|&b| b == ARG_DELIMITER).unwrap();
+                        let id = Uuid::from_slice(&args[..delim_pos]).unwrap();
+                        let username = String::from_utf8(args[delim_pos + 1..].to_vec()).unwrap();
+                        (*current_lobby)
+                            .as_mut()
+                            .unwrap()
+                            .players
+                            .push((id, username));
+                    }
+                }
                 Command::LeaveLobby => {
                     lobby_state.set(LobbyState::LobbiesList).unwrap();
+                    *current_lobby = None;
+                }
+                Command::PlayerLeftLobby => {
+                    if let LobbyState::InLobby = lobby_state.current() {
+                        let id = Uuid::from_slice(&packet.args.get_range(..)).unwrap();
+                        (*current_lobby)
+                            .as_mut()
+                            .unwrap()
+                            .players
+                            .retain(|p| p.0 != id);
+                    }
                 }
                 Command::LobbiesInfo => {
                     if let LobbyState::LobbiesList = lobby_state.current() {
-                        lobbies.0.drain(..);
-                        let lobbies_raw = packet.args.get_range(..);
-                        for i in (0..lobbies_raw.len()).step_by(2) {
-                            lobbies.0.push(Lobby {
-                                id: lobbies_raw[i],
-                                number_players: lobbies_raw[i + 1],
+                        lobbies.0 = packet
+                            .args
+                            .get_range(..)
+                            .into_iter()
+                            .tuples()
+                            .map(|(id, number_players)| Lobby {
+                                id,
+                                number_players,
                                 players: Vec::new(),
-                            });
-                        }
+                            })
+                            .collect::<Vec<Lobby>>();
                     }
                 }
                 Command::LobbyInfo => {
@@ -292,7 +331,10 @@ fn lobby_panel(
             });
         }),
         LobbyState::InLobby => window.show(egui_context.ctx(), |ui| {
-            let lobby = current_lobby.as_ref().as_ref().unwrap();
+            let lobby = match (*current_lobby).as_ref() {
+                Some(l) => l,
+                None => return,
+            };
 
             ui.vertical_centered(|ui| {
                 ui.heading(format!("Lobby #{}", lobby.id));
@@ -300,7 +342,11 @@ fn lobby_panel(
 
             ui.separator();
             for player in &lobby.players {
-                ui.label(player);
+                ui.label(
+                    egui::RichText::new(format!("➡ {}", player.1))
+                        .monospace()
+                        .heading(),
+                );
             }
             ui.separator();
 

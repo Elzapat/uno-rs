@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
     iter::FromIterator,
     net::TcpStream,
-    ops::RangeBounds,
+    ops::{Bound, RangeBounds},
 };
 
 /// Delimiter between packets
@@ -69,10 +69,12 @@ pub enum Command {
     Error = 0,
     CreateLobby = 1,
     JoinLobby = 2,
-    LeaveLobby = 3,
-    LobbiesInfo = 4,
-    LobbyInfo = 5,
-    Username = 6,
+    PlayerJoinedLobby = 3,
+    LeaveLobby = 4,
+    PlayerLeftLobby = 5,
+    LobbiesInfo = 6,
+    LobbyInfo = 7,
+    Username = 8,
     Unknown = 255,
 }
 
@@ -82,10 +84,12 @@ impl From<u8> for Command {
             0 => Command::Error,
             1 => Command::CreateLobby,
             2 => Command::JoinLobby,
-            3 => Command::LeaveLobby,
-            4 => Command::LobbiesInfo,
-            5 => Command::LobbyInfo,
-            6 => Command::Username,
+            3 => Command::PlayerJoinedLobby,
+            4 => Command::LeaveLobby,
+            5 => Command::PlayerLeftLobby,
+            6 => Command::LobbiesInfo,
+            7 => Command::LobbyInfo,
+            8 => Command::Username,
             _ => Command::Unknown,
         }
     }
@@ -117,6 +121,12 @@ impl Args {
     where
         R: RangeBounds<usize>,
     {
+        if let Bound::Included(&start) = range.start_bound() {
+            if start > self.0.len() {
+                return Vec::new();
+            }
+        }
+
         self.0.drain(range).collect()
     }
 

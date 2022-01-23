@@ -1,11 +1,13 @@
-use uno::prelude::*;
-use std::{
-    net::TcpStream,
-    cell::Cell,
+use std::net::TcpStream;
+use uno::{
+    packet::{ARG_DELIMITER, PACKET_DELIMITER},
+    prelude::*,
 };
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct Client {
+    pub id: Uuid,
     pub socket: TcpStream,
     pub incoming_packets: Vec<packet::Packet>,
     pub in_lobby: Option<usize>,
@@ -14,7 +16,13 @@ pub struct Client {
 
 impl Client {
     pub fn new(socket: TcpStream) -> Client {
+        let mut id = Uuid::new_v4();
+        while id.as_bytes().contains(&ARG_DELIMITER) || id.as_bytes().contains(&PACKET_DELIMITER) {
+            id = Uuid::new_v4();
+        }
+
         Client {
+            id,
             socket,
             incoming_packets: Vec::new(),
             in_lobby: None,
@@ -23,8 +31,10 @@ impl Client {
     }
 }
 
+impl Eq for Client {}
+
 impl PartialEq for Client {
     fn eq(&self, other: &Self) -> bool {
-        self.player == other.player
+        self.id == other.id
     }
 }

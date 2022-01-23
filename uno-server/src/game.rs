@@ -1,5 +1,3 @@
-use std::net::TcpStream;
-use uno::prelude::*;
 use crate::client::Client;
 
 enum GameState {
@@ -9,7 +7,7 @@ enum GameState {
 
 pub struct Game {
     state: GameState,
-    clients: Vec<Client>
+    clients: Vec<Client>,
 }
 
 impl Game {

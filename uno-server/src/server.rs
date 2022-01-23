@@ -1,4 +1,4 @@
-use crate::{client::Client, game::Game};
+use crate::client::Client;
 use log::{error, info};
 use std::{
     collections::HashMap,
@@ -10,6 +10,7 @@ use uno::{
     packet::{read_socket, write_socket, Command, ARG_DELIMITER},
     prelude::*,
 };
+use uuid::Uuid;
 
 const MAX_LOBBY_PLAYERS: usize = 10;
 const MAX_LOBBIES: usize = 10;
@@ -26,7 +27,7 @@ fn new_lobby_id() -> usize {
 
 struct Lobby {
     number_players: usize,
-    players: Vec<String>,
+    players: Vec<(Uuid, String)>,
 }
 
 pub struct Server {
@@ -105,19 +106,15 @@ impl Server {
     }
 
     fn execute_commands(&mut self) -> Result {
+        let mut player_left = None;
+        let mut player_joined = None;
+
         for client in self.clients.iter_mut() {
             for mut packet in client.incoming_packets.drain(..) {
                 match packet.command {
                     Command::CreateLobby => {
                         if self.lobbies.len() < MAX_LOBBIES {
                             let new_lobby_id = new_lobby_id();
-                            /*
-                            write_socket(
-                                &mut client.socket,
-                                Command::JoinLobby,
-                                new_lobby_id as u8,
-                            )?;
-                            */
                             self.lobbies.insert(
                                 new_lobby_id,
                                 Lobby {
@@ -137,20 +134,31 @@ impl Server {
                         if let Some(lobby_id) = packet.args.get(0) {
                             if let Some(ref mut lobby) = self.lobbies.get_mut(&(*lobby_id as usize))
                             {
-                                lobby.number_players += 1;
-                                lobby.players.push(match &client.player {
+                                let username = match &client.player {
                                     Some(p) => p.username.clone(),
-                                    None => "Player".to_owned(),
-                                });
+                                    None => "Unknown Player".to_owned(),
+                                };
+
+                                player_joined =
+                                    Some((client.id, username.clone(), *lobby_id as usize));
+
+                                lobby.number_players += 1;
+                                lobby.players.push((client.id, username));
 
                                 let mut args = vec![*lobby_id];
 
-                                for player in &lobby.players {
-                                    args.extend_from_slice(player.as_bytes());
+                                for c in &lobby.players {
+                                    args.extend_from_slice(c.0.as_bytes());
+                                    args.push(ARG_DELIMITER);
+                                    args.extend_from_slice(c.1.as_bytes());
                                     args.push(ARG_DELIMITER);
                                 }
 
+                                // Remove the last ARG_DELIMITER that is not needed
+                                args.pop();
+
                                 write_socket(&mut client.socket, Command::JoinLobby, args)?;
+                                client.in_lobby = Some(*lobby_id as usize);
                             } else {
                                 write_socket(
                                     &mut client.socket,
@@ -162,11 +170,16 @@ impl Server {
                     }
                     Command::LeaveLobby => {
                         if let Some(lobby_id) = packet.args.get(0) {
-                            write_socket(&mut client.socket, Command::LeaveLobby, vec![])?;
                             if let Some(lobby) = self.lobbies.get_mut(&(*lobby_id as usize)) {
+                                player_left = Some((client.id, *lobby_id as usize));
+
+                                lobby.players.retain(|p| p.0 != client.id);
                                 if lobby.number_players > 0 {
                                     lobby.number_players -= 1;
                                 }
+
+                                write_socket(&mut client.socket, Command::LeaveLobby, vec![])?;
+                                client.in_lobby = None;
                             }
                         }
                     }
@@ -180,23 +193,6 @@ impl Server {
 
                         write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
                     }
-                    Command::LobbyInfo => {
-                        if let Some(lobby_id) = packet.args.get(0) {
-                            if let Some(lobby) = self.lobbies.get(&(*lobby_id as usize)) {
-                                let mut args = vec![
-                                    *lobby_id,
-                                    self.lobbies[&(*lobby_id as usize)].number_players as u8,
-                                ];
-
-                                for player in &lobby.players {
-                                    args.extend_from_slice(player.as_bytes());
-                                    args.push(ARG_DELIMITER);
-                                }
-
-                                write_socket(&mut client.socket, Command::LobbyInfo, args)?;
-                            }
-                        }
-                    }
                     Command::Username => {
                         if let Ok(username) = String::from_utf8(packet.args.get_range(..)) {
                             match client.player {
@@ -206,6 +202,38 @@ impl Server {
                         }
                     }
                     _ => {}
+                }
+            }
+        }
+
+        if let Some((id, lobby_id)) = player_left {
+            for client in self.clients.iter_mut() {
+                if let Some(client_lobby_id) = client.in_lobby {
+                    if lobby_id == client_lobby_id {
+                        write_socket(
+                            &mut client.socket,
+                            Command::PlayerLeftLobby,
+                            id.as_bytes().as_slice(),
+                        )?;
+                    }
+                }
+            }
+        } else if let Some((id, username, lobby_id)) = player_joined {
+            info!("{:?}", (id, &username, lobby_id));
+            for client in self.clients.iter_mut() {
+                if let Some(client_lobby_id) = client.in_lobby {
+                    if lobby_id == client_lobby_id && id != client.id {
+                        write_socket(
+                            &mut client.socket,
+                            Command::PlayerJoinedLobby,
+                            [
+                                id.as_bytes().as_slice(),
+                                &[ARG_DELIMITER],
+                                username.as_bytes(),
+                            ]
+                            .concat(),
+                        )?;
+                    }
                 }
             }
         }
