@@ -1,4 +1,4 @@
-use super::{LobbiesList, Lobby, LobbyState, RefreshTimer};
+use super::{LobbiesList, Lobby, LobbyState};
 use crate::{utils::errors::Error, Server};
 use bevy::prelude::*;
 use itertools::Itertools;
@@ -22,18 +22,6 @@ pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbySt
         .expect("Couldn't set socket to nonblocking");
     state.set(LobbyState::LobbiesList).unwrap();
     commands.insert_resource(Server { socket });
-}
-
-pub fn refresh_lobbies_list(
-    time: Res<Time>,
-    mut refresh_timer: ResMut<RefreshTimer>,
-    mut server: ResMut<Server>,
-) {
-    refresh_timer.0.tick(time.delta());
-
-    if refresh_timer.0.finished() {
-        write_socket(&mut server.socket, Command::LobbiesInfo, vec![]).unwrap();
-    }
 }
 
 pub fn read_incoming(
@@ -72,8 +60,14 @@ pub fn read_incoming(
                     });
                 }
                 Command::PlayerJoinedLobby => {
+                    for lobby in lobbies.0.iter_mut() {
+                        if lobby.id == *packet.args.get(0).unwrap() {
+                            lobby.number_players += 1;
+                        }
+                    }
+
                     if let LobbyState::InLobby = lobby_state.current() {
-                        let args = packet.args.get_range(..);
+                        let args = packet.args.get_range(1..);
                         let delim_pos = args.iter().position(|&b| b == ARG_DELIMITER).unwrap();
                         let id = Uuid::from_slice(&args[..delim_pos]).unwrap();
                         let username = String::from_utf8(args[delim_pos + 1..].to_vec()).unwrap();
@@ -89,13 +83,35 @@ pub fn read_incoming(
                     *current_lobby = None;
                 }
                 Command::PlayerLeftLobby => {
+                    for lobby in lobbies.0.iter_mut() {
+                        if lobby.id == *packet.args.get(0).unwrap() && lobby.number_players > 0 {
+                            lobby.number_players -= 1;
+                        }
+                    }
+
                     if let LobbyState::InLobby = lobby_state.current() {
-                        let id = Uuid::from_slice(&packet.args.get_range(..)).unwrap();
-                        (*current_lobby)
-                            .as_mut()
-                            .unwrap()
-                            .players
-                            .retain(|p| p.0 != id);
+                        let id = Uuid::from_slice(&packet.args.get_range(1..)).unwrap();
+                        if let Some(current_lobby) = (*current_lobby).as_mut() {
+                            current_lobby.players.retain(|p| p.0 != id);
+                        }
+                    }
+                }
+                Command::LobbyCreated => {
+                    let id = *packet.args.get(0).unwrap();
+                    lobbies.0.push(Lobby {
+                        id,
+                        number_players: 0,
+                        players: Vec::new(),
+                    });
+                }
+                Command::LobbyInfo => {
+                    if let LobbyState::InLobby = lobby_state.current() {
+                        if let Ok(players_raw) = String::from_utf8(packet.args.get_range(2..)) {
+                            let _players = players_raw
+                                .split(char::from_digit(ARG_DELIMITER.into(), 10).unwrap())
+                                .map(|p| p.to_owned())
+                                .collect::<Vec<String>>();
+                        }
                     }
                 }
                 Command::LobbiesInfo => {
@@ -111,16 +127,6 @@ pub fn read_incoming(
                                 players: Vec::new(),
                             })
                             .collect::<Vec<Lobby>>();
-                    }
-                }
-                Command::LobbyInfo => {
-                    if let LobbyState::InLobby = lobby_state.current() {
-                        if let Ok(players_raw) = String::from_utf8(packet.args.get_range(2..)) {
-                            let _players = players_raw
-                                .split(char::from_digit(ARG_DELIMITER.into(), 10).unwrap())
-                                .map(|p| p.to_owned())
-                                .collect::<Vec<String>>();
-                        }
                     }
                 }
                 Command::Error => {

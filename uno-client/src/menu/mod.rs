@@ -21,23 +21,14 @@ pub struct Lobby {
     players: Vec<(Uuid, String)>,
 }
 
-#[derive(Component)]
-pub struct RefreshTimer(Timer);
-
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
             .insert_resource(Option::<Lobby>::None)
-            .insert_resource(RefreshTimer(Timer::from_seconds(1.0, true)))
             .add_startup_system(lobbies::connect_to_server)
             .add_state(LobbyState::Unconnected)
-            .add_system_set(
-                SystemSet::on_enter(LobbyState::LobbiesList)
-                    .with_run_criteria(run_if_connected)
-                    .with_system(lobbies::refresh_lobbies_list),
-            )
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_connected)

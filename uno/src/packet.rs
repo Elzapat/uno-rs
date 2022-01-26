@@ -36,11 +36,11 @@ pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>> {
     let mut current_packet = Vec::new();
     let mut packets = Vec::new();
 
-    for i in 0..size {
-        if PACKET_DELIMITER == buffer[i] {
+    for byte in buffer.into_iter().take(size) {
+        if PACKET_DELIMITER == byte {
             packets.push(parse_packet(current_packet.drain(..).collect()));
         } else {
-            current_packet.push(buffer[i]);
+            current_packet.push(byte);
         }
     }
 
@@ -51,7 +51,7 @@ pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Res
 where
     A: Into<Args>,
 {
-    socket.write(
+    socket.write_all(
         &[
             &[command as u8],
             args.into().as_slice(),
@@ -68,13 +68,15 @@ where
 pub enum Command {
     Error = 0,
     CreateLobby = 1,
-    JoinLobby = 2,
-    PlayerJoinedLobby = 3,
-    LeaveLobby = 4,
-    PlayerLeftLobby = 5,
-    LobbiesInfo = 6,
-    LobbyInfo = 7,
-    Username = 8,
+    LobbyCreated = 2,
+    LobbyDestroyed = 3,
+    JoinLobby = 4,
+    PlayerJoinedLobby = 5,
+    LeaveLobby = 6,
+    PlayerLeftLobby = 7,
+    LobbyInfo = 8,
+    LobbiesInfo = 9,
+    Username = 10,
     Unknown = 255,
 }
 
@@ -83,21 +85,17 @@ impl From<u8> for Command {
         match v {
             0 => Command::Error,
             1 => Command::CreateLobby,
-            2 => Command::JoinLobby,
-            3 => Command::PlayerJoinedLobby,
-            4 => Command::LeaveLobby,
-            5 => Command::PlayerLeftLobby,
-            6 => Command::LobbiesInfo,
-            7 => Command::LobbyInfo,
-            8 => Command::Username,
+            2 => Command::LobbyCreated,
+            3 => Command::LobbyDestroyed,
+            4 => Command::JoinLobby,
+            5 => Command::PlayerJoinedLobby,
+            6 => Command::LeaveLobby,
+            7 => Command::PlayerLeftLobby,
+            8 => Command::LobbyInfo,
+            9 => Command::LobbiesInfo,
+            10 => Command::Username,
             _ => Command::Unknown,
         }
-    }
-}
-
-impl Into<u8> for Command {
-    fn into(self) -> u8 {
-        self as u8
     }
 }
 
@@ -110,7 +108,7 @@ impl Args {
     }
 
     fn add_byte(&mut self, b: u8) {
-        self.0.push(b.into());
+        self.0.push(b);
     }
 
     pub fn get(&self, index: usize) -> Option<&u8> {

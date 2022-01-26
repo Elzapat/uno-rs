@@ -62,8 +62,18 @@ impl Server {
         match self.listener.accept() {
             Ok((socket, ip)) => {
                 socket.set_nonblocking(true)?;
-                self.clients.push(Client::new(socket));
                 info!("New connection: {}", ip);
+
+                // Send all lobbies info to the new client
+                let mut infos = vec![];
+                for (id, lobby) in &self.lobbies {
+                    infos.push(*id as u8);
+                    infos.push(lobby.number_players as u8);
+                }
+
+                let mut client = Client::new(socket);
+                write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
+                self.clients.push(client);
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => error!("{}", e),
@@ -108,6 +118,7 @@ impl Server {
     fn execute_commands(&mut self) -> Result {
         let mut player_left = None;
         let mut player_joined = None;
+        let mut lobby_created = None;
 
         for client in self.clients.iter_mut() {
             for mut packet in client.incoming_packets.drain(..) {
@@ -122,6 +133,8 @@ impl Server {
                                     players: vec![],
                                 },
                             );
+
+                            lobby_created = Some(new_lobby_id as u8);
                         } else {
                             write_socket(
                                 &mut client.socket,
@@ -183,16 +196,6 @@ impl Server {
                             }
                         }
                     }
-                    Command::LobbiesInfo => {
-                        let mut infos = vec![];
-
-                        for (id, lobby) in &self.lobbies {
-                            infos.push(*id as u8);
-                            infos.push(lobby.number_players as u8);
-                        }
-
-                        write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
-                    }
                     Command::Username => {
                         if let Ok(username) = String::from_utf8(packet.args.get_range(..)) {
                             match client.player {
@@ -208,33 +211,29 @@ impl Server {
 
         if let Some((id, lobby_id)) = player_left {
             for client in self.clients.iter_mut() {
-                if let Some(client_lobby_id) = client.in_lobby {
-                    if lobby_id == client_lobby_id {
-                        write_socket(
-                            &mut client.socket,
-                            Command::PlayerLeftLobby,
-                            id.as_bytes().as_slice(),
-                        )?;
-                    }
-                }
+                write_socket(
+                    &mut client.socket,
+                    Command::PlayerLeftLobby,
+                    [&[lobby_id as u8], id.as_bytes().as_slice()].concat(),
+                )?;
             }
         } else if let Some((id, username, lobby_id)) = player_joined {
-            info!("{:?}", (id, &username, lobby_id));
             for client in self.clients.iter_mut() {
-                if let Some(client_lobby_id) = client.in_lobby {
-                    if lobby_id == client_lobby_id && id != client.id {
-                        write_socket(
-                            &mut client.socket,
-                            Command::PlayerJoinedLobby,
-                            [
-                                id.as_bytes().as_slice(),
-                                &[ARG_DELIMITER],
-                                username.as_bytes(),
-                            ]
-                            .concat(),
-                        )?;
-                    }
-                }
+                write_socket(
+                    &mut client.socket,
+                    Command::PlayerJoinedLobby,
+                    [
+                        &[lobby_id as u8],
+                        id.as_bytes().as_slice(),
+                        &[ARG_DELIMITER],
+                        username.as_bytes(),
+                    ]
+                    .concat(),
+                )?;
+            }
+        } else if let Some(id) = lobby_created {
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::LobbyCreated, id)?;
             }
         }
 
