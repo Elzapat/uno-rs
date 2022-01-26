@@ -1,8 +1,5 @@
+use crate::{utils::cursor_state::*, SpriteSize};
 use bevy::prelude::*;
-use crate::{
-    cursor_state::*,
-    SpriteSize,
-};
 
 pub struct DragAndDropPlugin;
 
@@ -47,9 +44,7 @@ fn start_drag(
         }
     } else if mouse_button.just_released(MouseButton::Left) {
         for entity in query_released.iter() {
-            commands.entity(entity)
-                .remove::<Dragged>()
-                .insert(Dropped);
+            commands.entity(entity).remove::<Dragged>().insert(Dropped);
         }
     }
 }

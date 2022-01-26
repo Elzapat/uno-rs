@@ -1,14 +1,10 @@
+mod menu;
+pub mod utils;
+
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use std::net::TcpStream;
-
-pub mod cursor_state;
-pub mod drag_and_drop;
-mod menu;
-
-use cursor_state::*;
-use drag_and_drop::*;
-use menu::MenuPlugin;
+use utils::drag_and_drop::*;
 
 #[derive(Component)]
 pub struct SpriteSize {
@@ -30,10 +26,11 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
-        .add_plugin(CursorStatePlugin)
-        .add_plugin(DragAndDropPlugin)
-        .add_plugin(MenuPlugin)
+        .add_plugin(utils::cursor_state::CursorStatePlugin)
+        .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
+        .add_plugin(menu::MenuPlugin)
         .add_startup_system(setup)
+        .add_system(utils::errors::display_error)
         // .add_system(animate_sprite_system)
         .insert_resource(Settings {
             username: String::from(""),
