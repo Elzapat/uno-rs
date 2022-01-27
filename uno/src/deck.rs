@@ -1,7 +1,7 @@
 use crate::prelude::*;
-use std::collections::VecDeque;
+use card::{Color, Value};
 use rand::Rng;
-use card::{ Value, Color };
+use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Deck {
@@ -17,9 +17,9 @@ impl Deck {
     }
 
     /// Fill the deck with the cards of a base Uno game:
-    ///  * 1 Zero of each color, and 2 of the other numbers
-    ///  * 2 draw two, 2 reverse and 2 skip of each color
-    ///  * 4 wild cards and 4 wild draw 4 cards
+    /// * 1 Zero of each color, and 2 of the other numbers
+    /// * 2 draw two, 2 reverse and 2 skip of each color
+    /// * 4 wild cards and 4 wild draw 4 cards
     pub fn full() -> Deck {
         let mut deck = Deck::empty();
 

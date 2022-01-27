@@ -77,6 +77,7 @@ pub enum Command {
     LobbyInfo = 8,
     LobbiesInfo = 9,
     Username = 10,
+    StartGame = 20,
     Unknown = 255,
 }
 
@@ -94,6 +95,7 @@ impl From<u8> for Command {
             8 => Command::LobbyInfo,
             9 => Command::LobbiesInfo,
             10 => Command::Username,
+            20 => Command::StartGame,
             _ => Command::Unknown,
         }
     }

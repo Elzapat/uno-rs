@@ -5,6 +5,7 @@ use bevy_egui::{egui, EguiContext};
 use uno::packet::{write_socket, Command};
 
 pub fn settings_panel(
+    mut commands: Commands,
     mut settings: ResMut<Settings>,
     mut server: ResMut<Server>,
     egui_context: ResMut<EguiContext>,
@@ -19,12 +20,21 @@ pub fn settings_panel(
         ui.horizontal(|ui| {
             ui.label("Username: ");
             if ui.text_edit_singleline(&mut settings.username).changed() {
-                write_socket(
-                    &mut server.socket,
-                    Command::Username,
-                    settings.username.as_bytes(),
-                )
-                .unwrap();
+                // Forbid characters ÿ and þ (255 and 254) because they would break packets
+                if settings.username.replace('ÿ', "").replace('þ', "").len()
+                    != settings.username.len()
+                {
+                    commands.spawn().insert(Error {
+                        message: "Your username cannot contain the character ÿ or þ.".to_owned(),
+                    });
+                } else {
+                    write_socket(
+                        &mut server.socket,
+                        Command::Username,
+                        settings.username.as_bytes(),
+                    )
+                    .unwrap();
+                }
             }
 
             ui.checkbox(&mut settings.enable_animations, "Enable animations");
@@ -117,6 +127,10 @@ pub fn lobby_panel(
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
                     write_socket(&mut server.socket, Command::LeaveLobby, lobby.id).unwrap();
+                }
+
+                if ui.button("Start game").clicked() {
+                    write_socket(&mut server.socket, Command::StartGame, 0).unwrap();
                 }
             });
         }),
