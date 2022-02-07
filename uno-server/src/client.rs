@@ -11,7 +11,7 @@ pub struct Client {
     pub socket: TcpStream,
     pub incoming_packets: Vec<packet::Packet>,
     pub in_lobby: Option<usize>,
-    pub player: Option<Player>,
+    pub player: Player,
 }
 
 impl Client {
@@ -26,9 +26,11 @@ impl Client {
             socket,
             incoming_packets: Vec::new(),
             in_lobby: None,
-            player: None,
+            player: Player::new("Unknown Player".to_owned()),
         }
     }
+
+    pub fn read_socket() {}
 }
 
 impl Eq for Client {}

@@ -66,6 +66,7 @@ where
 /// Command bytes
 #[derive(Clone, Copy, Debug)]
 pub enum Command {
+    // Lobby commands
     Error = 0,
     CreateLobby = 1,
     LobbyCreated = 2,
@@ -78,6 +79,12 @@ pub enum Command {
     LobbiesInfo = 9,
     Username = 10,
     StartGame = 20,
+    // In game commmands
+    PlayCard = 30,
+    DealCard = 31,
+    ChooseColor = 35,
+    Uno = 40,
+    //
     Unknown = 255,
 }
 
@@ -96,6 +103,10 @@ impl From<u8> for Command {
             9 => Command::LobbiesInfo,
             10 => Command::Username,
             20 => Command::StartGame,
+            30 => Command::PlayCard,
+            31 => Command::DealCard,
+            35 => Command::ChooseColor,
+            40 => Command::Uno,
             _ => Command::Unknown,
         }
     }

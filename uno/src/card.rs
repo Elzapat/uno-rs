@@ -7,8 +7,8 @@ pub enum Color {
     Black,
 }
 
-impl From<i32> for Color {
-    fn from(color: i32) -> Color {
+impl From<u8> for Color {
+    fn from(color: u8) -> Color {
         match color {
             0 => Color::Red,
             1 => Color::Yellow,
@@ -39,25 +39,25 @@ pub enum Value {
     Back,
 }
 
-impl From<i32> for Value {
-    fn from(value: i32) -> Value {
+impl From<u8> for Value {
+    fn from(value: u8) -> Value {
         match value {
-            0  => Value::Zero,
-            1  => Value::One,
-            2  => Value::Two,
-            3  => Value::Three,
-            4  => Value::Four,
-            5  => Value::Five,
-            6  => Value::Six,
-            7  => Value::Seven,
-            8  => Value::Eight,
-            9  => Value::Nine,
+            0 => Value::Zero,
+            1 => Value::One,
+            2 => Value::Two,
+            3 => Value::Three,
+            4 => Value::Four,
+            5 => Value::Five,
+            6 => Value::Six,
+            7 => Value::Seven,
+            8 => Value::Eight,
+            9 => Value::Nine,
             10 => Value::Skip,
             11 => Value::Reverse,
             12 => Value::DrawTwo,
             13 => Value::Wild,
             14 => Value::WildFour,
-            _  => Value::Back,
+            _ => Value::Back,
         }
     }
 }
@@ -68,11 +68,17 @@ pub struct Card {
     value: Value,
 }
 
-impl From<(i32, i32)> for Card {
-    fn from(card: (i32, i32)) -> Card {
+impl From<(u8, u8)> for Card {
+    fn from(card: (u8, u8)) -> Card {
         Card {
             color: card.0.into(),
             value: card.1.into(),
         }
+    }
+}
+
+impl Into<[u8; 2]> for Card {
+    fn into(self) -> [u8; 2] {
+        [self.color as u8, self.value as u8]
     }
 }

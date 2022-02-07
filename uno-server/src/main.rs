@@ -1,3 +1,5 @@
+#![feature(drain_filter)]
+
 use log::error;
 use server::Server;
 use simple_logger::SimpleLogger;

@@ -1,4 +1,4 @@
-use crate::client::Client;
+use crate::{client::Client, game::Game};
 use log::{error, info};
 use std::{
     collections::HashMap,
@@ -132,10 +132,17 @@ impl Server {
         let mut player_left = None;
         let mut player_joined = None;
         let mut lobby_created = None;
+        let mut start_game = None;
 
         for client in self.clients.iter_mut() {
             for mut packet in client.incoming_packets.drain(..) {
                 match packet.command {
+                    Command::StartGame => {
+                        if let Some(lobby_id) = client.in_lobby {
+                            start_game = Some(lobby_id);
+                            self.lobbies.remove(&lobby_id);
+                        }
+                    }
                     Command::CreateLobby => {
                         if self.lobbies.len() < MAX_LOBBIES {
                             let new_lobby_id = new_lobby_id();
@@ -172,15 +179,15 @@ impl Server {
                                     return Ok(());
                                 }
 
-                                let username = match &client.player {
-                                    Some(p) => p.username.clone(),
-                                    None => "Unknown Player".to_owned(),
-                                };
+                                player_joined = Some((
+                                    client.id,
+                                    client.player.username.clone(),
+                                    *lobby_id as usize,
+                                ));
 
-                                player_joined =
-                                    Some((client.id, username.clone(), *lobby_id as usize));
-
-                                lobby.players.push((client.id, username));
+                                lobby
+                                    .players
+                                    .push((client.id, client.player.username.clone()));
 
                                 let mut args = vec![*lobby_id];
 
@@ -228,10 +235,7 @@ impl Server {
                     }
                     Command::Username => {
                         if let Ok(username) = String::from_utf8(packet.args.get_range(..)) {
-                            match client.player {
-                                None => client.player = Some(Player::new(username)),
-                                Some(ref mut p) => p.username = username,
-                            };
+                            client.player.username = username;
                         }
                     }
                     _ => {}
@@ -264,6 +268,28 @@ impl Server {
         } else if let Some(id) = lobby_created {
             for client in self.clients.iter_mut() {
                 write_socket(&mut client.socket, Command::LobbyCreated, id)?;
+            }
+        } else if let Some(lobby_id) = start_game {
+            let mut clients = self
+                .clients
+                .drain_filter(|client| {
+                    if let Some(id) = client.in_lobby {
+                        id == lobby_id
+                    } else {
+                        false
+                    }
+                })
+                .collect::<Vec<Client>>();
+
+            for client in clients.iter_mut() {
+                write_socket(&mut client.socket, Command::StartGame, vec![])?;
+            }
+
+            self.game_threads
+                .push(thread::spawn(|| Game::new(clients).run()));
+
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::LobbyDestroyed, lobby_id as u8)?;
             }
         }
 

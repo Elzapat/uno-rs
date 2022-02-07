@@ -1,3 +1,4 @@
+mod game;
 mod menu;
 pub mod utils;
 
@@ -5,6 +6,13 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use std::net::TcpStream;
 use utils::drag_and_drop::*;
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+pub enum GameState {
+    Lobbies,
+    Game,
+    EndLobby,
+}
 
 #[derive(Component)]
 pub struct SpriteSize {
@@ -24,11 +32,19 @@ pub struct Server {
 
 fn main() {
     App::new()
+        .insert_resource(WindowDescriptor {
+            title: "Uno!".to_owned(),
+            width: 1920.0,
+            height: 1080.0,
+            ..WindowDescriptor::default()
+        })
+        .add_state(GameState::Lobbies)
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(utils::cursor_state::CursorStatePlugin)
         .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
         .add_plugin(menu::MenuPlugin)
+        .add_plugin(game::GamePlugin)
         .add_startup_system(setup)
         .add_system(utils::errors::display_error)
         // .add_system(animate_sprite_system)
@@ -39,6 +55,7 @@ fn main() {
         .run();
 }
 
+/*
 fn animate_sprite_system(
     time: Res<Time>,
     texture_atlases: Res<Assets<TextureAtlas>>,
@@ -52,48 +69,8 @@ fn animate_sprite_system(
         }
     }
 }
+*/
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-) {
+fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-
-    const SPRITE_WIDTH: f32 = 4860.0 / 10.0;
-    const SPRITE_HEIGHT: f32 = 4554.0 / 6.0;
-
-    let texture_handle = asset_server.load("cards_a_03.png");
-    let texture_atlas = TextureAtlas::from_grid(
-        texture_handle,
-        Vec2::new(SPRITE_WIDTH, SPRITE_HEIGHT),
-        10,
-        6,
-    );
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
-    commands
-        .spawn_bundle(SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3::splat(1.0)),
-            ..Default::default()
-        })
-        .insert(Timer::from_seconds(0.5, true))
-        .insert(Draggable)
-        .insert(SpriteSize {
-            width: SPRITE_WIDTH,
-            height: SPRITE_HEIGHT,
-        });
-
-    let texture_handle = asset_server.load("dirt.png");
-    commands
-        .spawn_bundle(SpriteBundle {
-            texture: texture_handle,
-            transform: Transform::from_scale(Vec3::splat(0.5)),
-            ..Default::default()
-        })
-        .insert(Draggable)
-        .insert(SpriteSize {
-            width: 512.0 * 0.5,
-            height: 512.0 * 0.5,
-        });
 }

@@ -1,8 +1,8 @@
 mod lobbies;
 mod ui;
 
-use bevy::ecs::schedule::ShouldRun;
-use bevy::prelude::*;
+use crate::GameState;
+use bevy::{ecs::schedule::ShouldRun, prelude::*};
 use uuid::Uuid;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -44,16 +44,26 @@ impl Plugin for MenuPlugin {
     }
 }
 
-fn run_if_connected(state: Res<State<LobbyState>>) -> ShouldRun {
-    if state.current() != &LobbyState::Unconnected {
+fn run_if_connected(
+    lobby_state: Res<State<LobbyState>>,
+    game_state: Res<State<GameState>>,
+) -> ShouldRun {
+    if lobby_state.current() != &LobbyState::Unconnected
+        && game_state.current() == &GameState::Lobbies
+    {
         ShouldRun::Yes
     } else {
         ShouldRun::No
     }
 }
 
-fn run_if_not_connected(state: Res<State<LobbyState>>) -> ShouldRun {
-    if state.current() == &LobbyState::Unconnected {
+fn run_if_not_connected(
+    lobby_state: Res<State<LobbyState>>,
+    game_state: Res<State<GameState>>,
+) -> ShouldRun {
+    if lobby_state.current() == &LobbyState::Unconnected
+        && game_state.current() == &GameState::Lobbies
+    {
         ShouldRun::Yes
     } else {
         ShouldRun::No

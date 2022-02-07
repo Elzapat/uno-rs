@@ -23,10 +23,10 @@ impl Deck {
     pub fn full() -> Deck {
         let mut deck = Deck::empty();
 
-        for color in (Color::Red as i32)..=(Color::Blue as i32) {
-            for value in (Value::Zero as i32)..=(Value::DrawTwo as i32) {
+        for color in (Color::Red as u8)..=(Color::Blue as u8) {
+            for value in (Value::Zero as u8)..=(Value::DrawTwo as u8) {
                 for i in 0..2 {
-                    if i == 1 && value == Value::Zero as i32 {
+                    if i == 1 && value == Value::Zero as u8 {
                         continue;
                     }
 
@@ -35,9 +35,9 @@ impl Deck {
             }
         }
 
-        for value in (Value::Wild as i32)..=(Value::WildFour as i32) {
+        for value in (Value::Wild as u8)..=(Value::WildFour as u8) {
             for _ in 0..4 {
-                let color = Color::Black as i32;
+                let color = Color::Black as u8;
                 deck.insert((color, value).into());
             }
         }

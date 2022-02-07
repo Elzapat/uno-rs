@@ -1,9 +1,9 @@
 use super::{LobbiesList, Lobby, LobbyState};
-use crate::{utils::errors::Error, Server};
+use crate::{utils::errors::Error, GameState, Server};
 use bevy::prelude::*;
 use itertools::Itertools;
 use std::net::TcpStream;
-use uno::packet::{read_socket, write_socket, Command, ARG_DELIMITER};
+use uno::packet::{read_socket, Command, ARG_DELIMITER};
 use uuid::Uuid;
 
 pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbyState>>) {
@@ -30,12 +30,14 @@ pub fn read_incoming(
     mut lobby_state: ResMut<State<LobbyState>>,
     mut lobbies: ResMut<LobbiesList>,
     mut current_lobby: ResMut<Option<Lobby>>,
+    mut game_state: ResMut<State<GameState>>,
 ) {
     if let Ok(packets) = read_socket(&mut server.socket) {
         // println!("{:?}", packets);
         for mut packet in packets {
             info!("{:?}", packet);
             match packet.command {
+                Command::StartGame => game_state.set(GameState::Game).unwrap(),
                 Command::JoinLobby => {
                     let players = packet
                         .args
