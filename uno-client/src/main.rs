@@ -5,6 +5,7 @@ pub mod utils;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use std::net::TcpStream;
+use uno::packet::{read_socket, Packet};
 use utils::drag_and_drop::*;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -30,6 +31,8 @@ pub struct Server {
     socket: TcpStream,
 }
 
+pub struct IncomingPackets(Vec<Packet>);
+
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -38,6 +41,7 @@ fn main() {
             height: 1080.0,
             ..WindowDescriptor::default()
         })
+        .insert_resource(IncomingPackets(Vec::new()))
         .add_state(GameState::Lobbies)
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
@@ -47,12 +51,22 @@ fn main() {
         .add_plugin(game::GamePlugin)
         .add_startup_system(setup)
         .add_system(utils::errors::display_error)
+        .add_system(read_server_socket)
         // .add_system(animate_sprite_system)
         .insert_resource(Settings {
             username: String::from(""),
             enable_animations: true,
         })
         .run();
+}
+
+pub fn read_server_socket(
+    mut server: ResMut<Server>,
+    mut incoming_packets: ResMut<IncomingPackets>,
+) {
+    if let Ok(mut packets) = read_socket(&mut server.socket) {
+        incoming_packets.0.append(&mut packets);
+    }
 }
 
 /*

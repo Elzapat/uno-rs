@@ -81,7 +81,7 @@ pub enum Command {
     StartGame = 20,
     // In game commmands
     PlayCard = 30,
-    DealCard = 31,
+    DrawCard = 31,
     ChooseColor = 35,
     Uno = 40,
     //
@@ -104,7 +104,7 @@ impl From<u8> for Command {
             10 => Command::Username,
             20 => Command::StartGame,
             30 => Command::PlayCard,
-            31 => Command::DealCard,
+            31 => Command::DrawCard,
             35 => Command::ChooseColor,
             40 => Command::Uno,
             _ => Command::Unknown,

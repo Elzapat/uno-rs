@@ -21,7 +21,6 @@ impl From<u8> for Color {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Value {
-    Zero,
     One,
     Two,
     Three,
@@ -31,6 +30,7 @@ pub enum Value {
     Seven,
     Eight,
     Nine,
+    Zero,
     Skip,
     Reverse,
     DrawTwo,
@@ -64,8 +64,8 @@ impl From<u8> for Value {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Card {
-    color: Color,
-    value: Value,
+    pub color: Color,
+    pub value: Value,
 }
 
 impl From<(u8, u8)> for Card {
@@ -74,6 +74,18 @@ impl From<(u8, u8)> for Card {
             color: card.0.into(),
             value: card.1.into(),
         }
+    }
+}
+
+impl From<[u8; 2]> for Card {
+    fn from(arr: [u8; 2]) -> Card {
+        Card::from((arr[0], arr[1]))
+    }
+}
+
+impl From<&[u8]> for Card {
+    fn from(arr: &[u8]) -> Card {
+        Card::from((arr[0], arr[1]))
     }
 }
 

@@ -33,7 +33,7 @@ impl Plugin for MenuPlugin {
                 SystemSet::new()
                     .with_run_criteria(run_if_connected)
                     .with_system(ui::settings_panel)
-                    .with_system(lobbies::read_incoming)
+                    .with_system(lobbies::execute_packets)
                     .with_system(ui::lobby_panel),
             )
             .add_system_set(

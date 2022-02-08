@@ -37,7 +37,7 @@ impl Game {
         for client in self.clients.iter_mut() {
             for _ in 0..INITIAL_CARDS {
                 let card: [u8; 2] = self.deck.draw().unwrap().into();
-                if let Err(e) = write_socket(&mut client.socket, Command::DealCard, &card[..]) {
+                if let Err(e) = write_socket(&mut client.socket, Command::DrawCard, &card[..]) {
                     error!("{}", e);
                 }
             }
