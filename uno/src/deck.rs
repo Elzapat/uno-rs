@@ -23,8 +23,8 @@ impl Deck {
     pub fn full() -> Deck {
         let mut deck = Deck::empty();
 
-        for color in (Color::Red as u8)..=(Color::Blue as u8) {
-            for value in (Value::Zero as u8)..=(Value::DrawTwo as u8) {
+        for color in (Color::Yellow as u8)..=(Color::Green as u8) {
+            for value in (Value::One as u8)..=(Value::Reverse as u8) {
                 for i in 0..2 {
                     if i == 1 && value == Value::Zero as u8 {
                         continue;

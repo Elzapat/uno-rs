@@ -1,3 +1,4 @@
+#[allow(clippy::type_complexity)]
 mod game;
 mod menu;
 pub mod utils;
@@ -39,6 +40,7 @@ fn main() {
             title: "Uno!".to_owned(),
             width: 1920.0,
             height: 1080.0,
+            vsync: false,
             ..WindowDescriptor::default()
         })
         .insert_resource(IncomingPackets(Vec::new()))

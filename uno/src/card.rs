@@ -1,19 +1,19 @@
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Color {
-    Red,
-    Yellow,
-    Green,
-    Blue,
-    Black,
+    Yellow = 0,
+    Red = 1,
+    Blue = 2,
+    Green = 3,
+    Black = 4,
 }
 
 impl From<u8> for Color {
     fn from(color: u8) -> Color {
         match color {
-            0 => Color::Red,
-            1 => Color::Yellow,
-            2 => Color::Green,
-            3 => Color::Blue,
+            0 => Color::Yellow,
+            1 => Color::Red,
+            2 => Color::Blue,
+            3 => Color::Green,
             _ => Color::Black,
         }
     }
@@ -21,28 +21,27 @@ impl From<u8> for Color {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Value {
-    One,
-    Two,
-    Three,
-    Four,
-    Five,
-    Six,
-    Seven,
-    Eight,
-    Nine,
-    Zero,
-    Skip,
-    Reverse,
-    DrawTwo,
-    Wild,
-    WildFour,
-    Back,
+    One = 1,
+    Two = 2,
+    Three = 3,
+    Four = 4,
+    Five = 5,
+    Six = 6,
+    Seven = 7,
+    Eight = 8,
+    Nine = 9,
+    Zero = 10,
+    DrawTwo = 11,
+    Skip = 12,
+    Reverse = 13,
+    Wild = 14,
+    WildFour = 15,
+    Back = 16,
 }
 
 impl From<u8> for Value {
     fn from(value: u8) -> Value {
         match value {
-            0 => Value::Zero,
             1 => Value::One,
             2 => Value::Two,
             3 => Value::Three,
@@ -52,11 +51,12 @@ impl From<u8> for Value {
             7 => Value::Seven,
             8 => Value::Eight,
             9 => Value::Nine,
-            10 => Value::Skip,
-            11 => Value::Reverse,
-            12 => Value::DrawTwo,
-            13 => Value::Wild,
-            14 => Value::WildFour,
+            10 => Value::Zero,
+            11 => Value::DrawTwo,
+            12 => Value::Skip,
+            13 => Value::Reverse,
+            14 => Value::Wild,
+            15 => Value::WildFour,
             _ => Value::Back,
         }
     }

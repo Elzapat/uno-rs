@@ -281,6 +281,8 @@ impl Server {
                 })
                 .collect::<Vec<Client>>();
 
+            self.lobbies.remove(&lobby_id);
+
             for client in clients.iter_mut() {
                 write_socket(&mut client.socket, Command::StartGame, vec![])?;
             }

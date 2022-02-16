@@ -44,7 +44,7 @@ impl Game {
         }
 
         loop {
-            if self.clients.len() == 0 {
+            if self.clients.is_empty() {
                 return;
             }
 
