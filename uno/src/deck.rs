@@ -50,6 +50,11 @@ impl Deck {
         self.cards.len()
     }
 
+    /// Whether the deck is empty or not
+    pub fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+
     /// Shuffle the deck randomly
     pub fn shuffle(&mut self) {
         let mut rng = rand::thread_rng();
@@ -66,8 +71,18 @@ impl Deck {
         self.cards.push_back(card);
     }
 
+    /// Add a card on top of the deck
+    pub fn add(&mut self, card: Card) {
+        self.cards.push_front(card);
+    }
+
     /// Draw a card at the top of the deck
     pub fn draw(&mut self) -> Option<Card> {
         self.cards.pop_front()
+    }
+
+    /// Peek at the card on top of the deck
+    pub fn top(&mut self) -> Option<&Card> {
+        self.cards.get(0)
     }
 }

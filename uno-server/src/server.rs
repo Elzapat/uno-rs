@@ -287,8 +287,11 @@ impl Server {
                 write_socket(&mut client.socket, Command::StartGame, vec![])?;
             }
 
-            self.game_threads
-                .push(thread::spawn(|| Game::new(clients).run()));
+            self.game_threads.push(thread::spawn(|| {
+                if let Err(e) = Game::new(clients).run() {
+                    error!("{e}");
+                }
+            }));
 
             for client in self.clients.iter_mut() {
                 write_socket(&mut client.socket, Command::LobbyDestroyed, lobby_id as u8)?;

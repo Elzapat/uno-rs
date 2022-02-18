@@ -81,10 +81,14 @@ pub enum Command {
     StartGame = 20,
     // In game commmands
     PlayCard = 30,
-    DrawCard = 31,
+    CardPlayed = 31,
+    CardValidation = 32,
+    DrawCard = 33,
     ChooseColor = 35,
     Uno = 40,
-    //
+    PassTurn = 41,
+    YourPlayerId = 50,
+    // Other
     Unknown = 255,
 }
 
@@ -104,16 +108,20 @@ impl From<u8> for Command {
             10 => Command::Username,
             20 => Command::StartGame,
             30 => Command::PlayCard,
-            31 => Command::DrawCard,
+            31 => Command::CardPlayed,
+            32 => Command::CardValidation,
+            33 => Command::DrawCard,
             35 => Command::ChooseColor,
             40 => Command::Uno,
+            41 => Command::PassTurn,
+            50 => Command::YourPlayerId,
             _ => Command::Unknown,
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Args(Vec<u8>);
+pub struct Args(pub Vec<u8>);
 
 impl Args {
     fn new() -> Self {

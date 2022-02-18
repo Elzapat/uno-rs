@@ -1,4 +1,5 @@
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 mod game;
 mod menu;
 pub mod utils;
@@ -9,6 +10,7 @@ use std::net::TcpStream;
 use uno::packet::{read_socket, Packet};
 use utils::drag_and_drop::*;
 
+// States
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GameState {
     Lobbies,
@@ -16,22 +18,22 @@ pub enum GameState {
     EndLobby,
 }
 
+// Components
 #[derive(Component)]
 pub struct SpriteSize {
     width: f32,
     height: f32,
 }
-
-pub struct Settings {
-    username: String,
-    enable_animations: bool,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Component)]
 pub struct Server {
     socket: TcpStream,
 }
 
+// Resources
+pub struct Settings {
+    username: String,
+    enable_animations: bool,
+}
 pub struct IncomingPackets(Vec<Packet>);
 
 fn main() {
@@ -63,11 +65,13 @@ fn main() {
 }
 
 pub fn read_server_socket(
-    mut server: ResMut<Server>,
+    mut server_query: Query<&mut Server>,
     mut incoming_packets: ResMut<IncomingPackets>,
 ) {
-    if let Ok(mut packets) = read_socket(&mut server.socket) {
-        incoming_packets.0.append(&mut packets);
+    if let Ok(mut server) = server_query.get_single_mut() {
+        if let Ok(mut packets) = read_socket(&mut server.socket) {
+            incoming_packets.0.append(&mut packets);
+        }
     }
 }
 

@@ -1,39 +1,47 @@
-use super::{run_if_in_game, GameAssets};
+use super::{run_if_in_game, GameAssets, Player, ThisPlayer};
 use crate::{
     utils::constants::{
-        CARD_ANIMATION_TIME_S, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH, DECK_POS, DISCARD_POS,
-        Z_INCREASE,
+        CARD_ANIMATION_TIME_S, CARD_DROP_ZONE, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH, DECK_POS,
+        DISCARD_POS, Z_INCREASE,
     },
-    Draggable, Dragged, Dropped, GameState, SpriteSize,
+    Draggable, Dragged, Dropped, GameState, Server, SpriteSize,
 };
 use bevy::{prelude::*, window::WindowResized};
 use std::time::Duration;
-use uno::card::{Card, Color, Value};
+use uno::{
+    card::{Card, Color, Value},
+    packet::{write_socket, Command},
+};
 
 // Ressources
 pub struct CurrentCardZ(pub f32);
 pub struct Hand {
-    size: usize,
+    pub size: usize,
 }
 
 // Components
 #[derive(Component)]
-struct CardComponent(Card);
+pub struct CardComponent(pub Card);
 #[derive(Component)]
-struct Discard;
+pub struct Discard;
 #[derive(Component)]
-struct HandItem {
-    index: usize,
-    position: Vec3,
+pub struct HandItem {
+    pub index: usize,
 }
 #[derive(Component)]
-struct CardAnimation {
+pub struct CardPosition(pub Vec3);
+#[derive(Component, Default)]
+pub struct CardAnimation {
     time: Duration,
 }
+#[derive(Component, Default)]
+pub struct CardWaitingForValidation;
 
 // Events
-pub struct SpawnCardEvent(pub Card);
-struct ReorganizeHandEvent;
+pub struct DrawCardEvent(pub Card);
+pub struct CardPlayedEvent(pub Card);
+struct PlayCardEvent(pub Card);
+pub struct ReorganizeHandEvent;
 
 pub struct CardsPlugin;
 
@@ -41,18 +49,22 @@ impl Plugin for CardsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CurrentCardZ(Z_INCREASE))
             .insert_resource(Hand { size: 0 })
-            .add_event::<SpawnCardEvent>()
+            .add_event::<DrawCardEvent>()
+            .add_event::<CardPlayedEvent>()
+            .add_event::<PlayCardEvent>()
             .add_event::<ReorganizeHandEvent>()
             .add_system_set(SystemSet::on_enter(GameState::Game).with_system(setup_cards))
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_in_game)
-                    .with_system(spawn_card)
+                    .with_system(draw_card)
+                    .with_system(card_played)
                     .with_system(reorganize_hand)
                     .with_system(card_dropped)
                     .with_system(animate_card)
                     .with_system(window_resized)
-                    .with_system(remove_animation_on_drag),
+                    .with_system(remove_animation_on_drag)
+                    .with_system(play_card),
             );
     }
 }
@@ -63,6 +75,36 @@ pub fn card_to_spritesheet_index(card: &uno::card::Card) -> usize {
         Value::Wild => 1,
         Value::WildFour => 6,
         value => 11 + 13 * card.color as usize + value as usize,
+    }
+}
+
+fn card_played(
+    mut commands: Commands,
+    mut card_played_event: EventReader<CardPlayedEvent>,
+    discard_query: Query<Entity, With<Discard>>,
+    game_assets: Res<GameAssets>,
+) {
+    for CardPlayedEvent(card) in card_played_event.iter() {
+        let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, 0.0);
+        transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
+
+        for entity in discard_query.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        commands
+            .spawn_bundle(SpriteSheetBundle {
+                sprite: TextureAtlasSprite {
+                    index: card_to_spritesheet_index(card),
+                    ..TextureAtlasSprite::default()
+                },
+                texture_atlas: game_assets.cards.clone_weak(),
+                transform,
+                ..SpriteSheetBundle::default()
+            })
+            .insert(Discard)
+            .insert(CardAnimation::default())
+            .insert(CardPosition(Vec3::new(DISCARD_POS.0, DISCARD_POS.1, 0.0)));
     }
 }
 
@@ -101,15 +143,15 @@ fn setup_cards(mut commands: Commands, game_assets: Res<GameAssets>) {
         .insert(Discard);
 }
 
-fn spawn_card(
+fn draw_card(
     mut commands: Commands,
-    mut spawn_card_event: EventReader<SpawnCardEvent>,
+    mut draw_card_event: EventReader<DrawCardEvent>,
     mut reorganize_hand_event: EventWriter<ReorganizeHandEvent>,
     mut current_card_z: ResMut<CurrentCardZ>,
     mut hand: ResMut<Hand>,
     game_assets: Res<GameAssets>,
 ) {
-    for SpawnCardEvent(card) in spawn_card_event.iter() {
+    for DrawCardEvent(card) in draw_card_event.iter() {
         let index = card_to_spritesheet_index(card);
 
         let mut card_transform = Transform::from_xyz(DECK_POS.0, DECK_POS.1, current_card_z.0);
@@ -131,10 +173,8 @@ fn spawn_card(
                 height: CARD_HEIGHT,
             })
             .insert(CardComponent(*card))
-            .insert(HandItem {
-                index: hand.size,
-                position: card_transform.translation,
-            });
+            .insert(CardPosition(card_transform.translation))
+            .insert(HandItem { index: hand.size });
 
         hand.size += 1;
         current_card_z.0 += Z_INCREASE;
@@ -147,7 +187,7 @@ fn reorganize_hand(
     mut reorganize_hand_event: EventReader<ReorganizeHandEvent>,
     windows: Res<Windows>,
     hand: Res<Hand>,
-    mut query: Query<(Entity, &mut HandItem)>,
+    mut query: Query<(Entity, &HandItem, &mut CardPosition)>,
 ) {
     if hand.size == 0 {
         return;
@@ -162,13 +202,11 @@ fn reorganize_hand(
         let width = window.width() * (1.0 - 2.0 * X_PADDING);
         let part = width / hand.size as f32;
 
-        info!("hand size: {}", hand.size);
-        for (entity, mut item) in query.iter_mut() {
-            info!("{}", item.index);
-            item.position.y = card_y;
-            item.position.x = part * item.index as f32 + part / 2.0 - width / 2.0;
+        for (entity, item, mut card_position) in query.iter_mut() {
+            card_position.0.y = card_y;
+            card_position.0.x = part * item.index as f32 + part / 2.0 - width / 2.0;
 
-            commands.entity(entity).insert(Dropped);
+            commands.entity(entity).insert(CardAnimation::default());
         }
 
         // We don't care how many times the event has been queued, we reorganize once
@@ -178,34 +216,60 @@ fn reorganize_hand(
 
 fn card_dropped(
     mut commands: Commands,
-    query: Query<Entity, (With<Dropped>, With<CardComponent>)>,
+    mut play_card_event: EventWriter<PlayCardEvent>,
+    query: Query<(Entity, &Transform, &CardComponent), With<Dropped>>,
+    this_player: Query<&Player, With<ThisPlayer>>,
 ) {
-    for entity in query.iter() {
-        commands
-            .entity(entity)
-            .remove::<Dropped>()
-            .insert(CardAnimation {
-                time: Duration::default(),
-            });
+    for (entity, transform, card) in query.iter() {
+        if this_player.single().is_playing
+            && transform.translation.x < DISCARD_POS.0 + CARD_DROP_ZONE
+            && transform.translation.x > DISCARD_POS.0 - CARD_DROP_ZONE
+            && transform.translation.y < DISCARD_POS.1 + CARD_DROP_ZONE
+            && transform.translation.y > DISCARD_POS.1 - CARD_DROP_ZONE
+        {
+            commands
+                .entity(entity)
+                .remove::<Dropped>()
+                .insert(CardWaitingForValidation);
+
+            play_card_event.send(PlayCardEvent(card.0))
+        } else {
+            commands
+                .entity(entity)
+                .remove::<Dropped>()
+                .insert(CardAnimation::default());
+        }
+    }
+}
+
+fn play_card(
+    mut server_query: Query<&mut Server>,
+    mut play_card_event: EventReader<PlayCardEvent>,
+) {
+    for PlayCardEvent(card) in play_card_event.iter() {
+        let mut server = server_query.single_mut();
+
+        write_socket::<uno::packet::Args>(&mut server.socket, Command::PlayCard, (*card).into())
+            .unwrap();
     }
 }
 
 fn animate_card(
     time: Res<Time>,
     mut commands: Commands,
-    mut query: Query<(Entity, &HandItem, &mut Transform, &mut CardAnimation), Without<Dragged>>,
+    mut query: Query<(Entity, &CardPosition, &mut Transform, &mut CardAnimation), Without<Dragged>>,
 ) {
-    for (entity, hand_item, mut transform, mut card_animation) in query.iter_mut() {
+    for (entity, card_position, mut transform, mut card_animation) in query.iter_mut() {
         card_animation.time += time.delta();
 
         if card_animation.time.as_secs_f32() >= CARD_ANIMATION_TIME_S {
-            transform.translation = hand_item.position;
+            transform.translation = card_position.0;
             commands.entity(entity).remove::<CardAnimation>();
             return;
         }
 
         transform.translation = transform.translation.lerp(
-            hand_item.position,
+            card_position.0,
             ease_out_sine(card_animation.time.as_secs_f32() / CARD_ANIMATION_TIME_S),
         );
     }

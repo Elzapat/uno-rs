@@ -7,7 +7,7 @@ use uno::packet::{write_socket, Command};
 pub fn settings_panel(
     mut commands: Commands,
     mut settings: ResMut<Settings>,
-    mut server: ResMut<Server>,
+    mut server_query: Query<&mut Server>,
     egui_context: ResMut<EguiContext>,
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
@@ -29,7 +29,7 @@ pub fn settings_panel(
                     });
                 } else {
                     write_socket(
-                        &mut server.socket,
+                        &mut server_query.single_mut().socket,
                         Command::Username,
                         settings.username.as_bytes(),
                     )
@@ -44,7 +44,7 @@ pub fn settings_panel(
 
 pub fn lobby_panel(
     mut commands: Commands,
-    mut server: ResMut<Server>,
+    mut server_query: Query<&mut Server>,
     egui_context: Res<EguiContext>,
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
@@ -55,6 +55,8 @@ pub fn lobby_panel(
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false);
+
+    let mut server = server_query.single_mut();
 
     match lobby_state.current() {
         LobbyState::LobbiesList => window.show(egui_context.ctx(), |ui| {

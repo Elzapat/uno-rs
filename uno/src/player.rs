@@ -1,5 +1,14 @@
 use crate::prelude::*;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum PlayerState {
+    WaitingToPlay,
+    PlayingCard,
+    ChoosingColorWild,
+    ChoosingColorWildFour,
+    CallingUno,
+}
+
 /// Structure to define a Uno player
 #[derive(Clone, Debug)]
 pub struct Player {
@@ -7,6 +16,7 @@ pub struct Player {
     pub is_playing: bool,
     pub score: u32,
     pub username: String,
+    pub state: PlayerState,
 }
 
 impl Player {
@@ -14,6 +24,7 @@ impl Player {
         Player {
             hand: Vec::new(),
             is_playing: false,
+            state: PlayerState::WaitingToPlay,
             score: 0,
             username,
         }

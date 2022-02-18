@@ -1,5 +1,5 @@
 use super::{LobbiesList, Lobby, LobbyState};
-use crate::{utils::errors::Error, GameState, IncomingPackets, Server};
+use crate::{game::StartGameEvent, utils::errors::Error, IncomingPackets, Server};
 use bevy::prelude::*;
 use itertools::Itertools;
 use std::net::TcpStream;
@@ -20,8 +20,8 @@ pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbySt
     socket
         .set_nonblocking(true)
         .expect("Couldn't set socket to nonblocking");
+    commands.spawn().insert(Server { socket });
     state.set(LobbyState::LobbiesList).unwrap();
-    commands.insert_resource(Server { socket });
 }
 
 pub fn execute_packets(
@@ -29,7 +29,7 @@ pub fn execute_packets(
     mut lobby_state: ResMut<State<LobbyState>>,
     mut lobbies: ResMut<LobbiesList>,
     mut current_lobby: ResMut<Option<Lobby>>,
-    mut game_state: ResMut<State<GameState>>,
+    mut start_game_event: EventWriter<StartGameEvent>,
     mut incoming_packets: ResMut<IncomingPackets>,
 ) {
     let packets = incoming_packets.0.drain(..).collect::<Vec<Packet>>();
@@ -37,7 +37,9 @@ pub fn execute_packets(
     for mut packet in packets {
         info!("{:?}", packet);
         match packet.command {
-            Command::StartGame => game_state.set(GameState::Game).unwrap(),
+            Command::StartGame => start_game_event.send(StartGameEvent(
+                current_lobby.as_ref().as_ref().unwrap().players.clone(),
+            )),
             Command::JoinLobby => {
                 let players = packet
                     .args

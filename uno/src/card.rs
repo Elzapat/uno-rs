@@ -1,4 +1,6 @@
-#[derive(Copy, Clone, Debug, PartialEq)]
+use crate::packet::Args;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Color {
     Yellow = 0,
     Red = 1,
@@ -19,7 +21,7 @@ impl From<u8> for Color {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     One = 1,
     Two = 2,
@@ -62,7 +64,7 @@ impl From<u8> for Value {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Card {
     pub color: Color,
     pub value: Value,
@@ -89,8 +91,21 @@ impl From<&[u8]> for Card {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<[u8; 2]> for Card {
     fn into(self) -> [u8; 2] {
         [self.color as u8, self.value as u8]
+    }
+}
+
+impl From<Args> for Card {
+    fn from(args: Args) -> Self {
+        Card::from((*args.get(0).unwrap(), *args.get(1).unwrap()))
+    }
+}
+
+impl From<Card> for Args {
+    fn from(card: Card) -> Self {
+        Args(vec![card.color as u8, card.value as u8])
     }
 }
