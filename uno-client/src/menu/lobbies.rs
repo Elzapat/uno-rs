@@ -107,6 +107,11 @@ pub fn execute_packets(
                     players: Vec::new(),
                 });
             }
+            Command::LobbyDestroyed => {
+                let id = *packet.args.get(0).unwrap();
+                let idx = lobbies.0.iter().position(|l| l.id == id).unwrap();
+                lobbies.0.remove(idx);
+            }
             Command::LobbyInfo => {
                 if let LobbyState::InLobby = lobby_state.current() {
                     if let Ok(players_raw) = String::from_utf8(packet.args.get_range(2..)) {

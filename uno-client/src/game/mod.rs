@@ -28,6 +28,12 @@ pub struct Player {
 pub struct ThisPlayer;
 #[derive(Component)]
 pub struct ChooseColor;
+#[derive(Component)]
+pub struct CallUno;
+#[derive(Component)]
+pub struct ToBeRemoved {
+    timer: Timer,
+}
 
 // Ressources
 pub struct GameAssets {
@@ -37,18 +43,21 @@ pub struct GameAssets {
 
 // Events
 pub struct StartGameEvent(pub Vec<(Uuid, String)>);
+pub struct ColorChosenEvent(pub Color);
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(cards::CardsPlugin)
             .add_plugin(ui::GameUiPlugin)
             .add_event::<StartGameEvent>()
+            .add_event::<ColorChosenEvent>()
             .add_startup_system(load_assets)
             .add_system(start_game)
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_in_game)
-                    .with_system(execute_packets),
+                    .with_system(execute_packets)
+                    .with_system(to_be_removed),
             )
             .add_system_set(SystemSet::on_enter(GameState::Game).with_system(setup));
     }
@@ -120,8 +129,7 @@ fn execute_packets(
     >,
     mut hand_item_query: Query<&mut HandItem, Without<CardWaitingForValidation>>,
     mut hand: ResMut<Hand>,
-    //
-    discard_query: Query<Entity, With<Discard>>,
+    mut discard_query: Query<(Entity, &mut Transform), With<Discard>>,
 ) {
     let packets = incoming_packets.0.drain(..).collect::<Vec<Packet>>();
 
@@ -136,23 +144,23 @@ fn execute_packets(
                 if let Ok((entity, card, mut card_pos, played_card_item)) =
                     card_validation_query.get_single_mut()
                 {
-                    commands
-                        .entity(entity)
-                        .remove::<CardWaitingForValidation>()
-                        .insert(CardAnimation::default());
-
                     if valid {
                         card_pos.0 = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, 0.0);
 
-                        for entity in discard_query.iter() {
-                            commands.entity(entity).despawn();
+                        for (entity, mut transform) in discard_query.iter_mut() {
+                            transform.translation.z = 0.0;
+                            commands
+                                .entity(entity)
+                                .remove::<Discard>()
+                                .insert(ToBeRemoved {
+                                    timer: Timer::from_seconds(1.0, false),
+                                });
                         }
 
                         commands
                             .entity(entity)
                             .remove::<Draggable>()
                             .remove::<HandItem>()
-                            .remove::<CardWaitingForValidation>()
                             .insert(Discard);
 
                         hand.size -= 1;
@@ -168,7 +176,16 @@ fn execute_packets(
                         if card.0.color == Color::Black {
                             commands.spawn().insert(ChooseColor);
                         }
+
+                        if hand.size == 1 {
+                            commands.spawn().insert(CallUno);
+                        }
                     }
+
+                    commands
+                        .entity(entity)
+                        .remove::<CardWaitingForValidation>()
+                        .insert(CardAnimation::default());
                 }
             }
             Command::PassTurn => {
@@ -186,6 +203,17 @@ fn execute_packets(
                     }
                 }
             }
+            Command::HandSize => {
+                let nb_cards = *packet.args.get(0).unwrap();
+                let uuid = Uuid::from_slice(&packet.args.get_range(1..)).unwrap();
+
+                for (_, mut player) in players_query.iter_mut() {
+                    if player.id == uuid {
+                        player.hand_size = nb_cards as usize;
+                        break;
+                    }
+                }
+            }
             _ => incoming_packets.0.push(packet),
         }
     }
@@ -197,6 +225,18 @@ fn setup(mut commands: Commands, game_assets: Res<GameAssets>) {
         texture: game_assets.background.clone(),
         ..SpriteBundle::default()
     });
+}
 
-    commands.spawn().insert(ChooseColor);
+fn to_be_removed(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut ToBeRemoved)>,
+) {
+    for (entity, mut tbr) in query.iter_mut() {
+        tbr.timer.tick(time.delta());
+
+        if tbr.timer.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
 }

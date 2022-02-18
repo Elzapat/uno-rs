@@ -1,4 +1,4 @@
-use super::{run_if_in_game, GameAssets, Player, ThisPlayer};
+use super::{run_if_in_game, ColorChosenEvent, GameAssets, Player, ThisPlayer, ToBeRemoved};
 use crate::{
     utils::constants::{
         CARD_ANIMATION_TIME_S, CARD_DROP_ZONE, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH, DECK_POS,
@@ -24,11 +24,11 @@ pub struct Hand {
 pub struct CardComponent(pub Card);
 #[derive(Component)]
 pub struct Discard;
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct HandItem {
     pub index: usize,
 }
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct CardPosition(pub Vec3);
 #[derive(Component, Default)]
 pub struct CardAnimation {
@@ -59,12 +59,18 @@ impl Plugin for CardsPlugin {
                     .with_run_criteria(run_if_in_game)
                     .with_system(draw_card)
                     .with_system(card_played)
-                    .with_system(reorganize_hand)
                     .with_system(card_dropped)
                     .with_system(animate_card)
                     .with_system(window_resized)
                     .with_system(remove_animation_on_drag)
-                    .with_system(play_card),
+                    .with_system(play_card)
+                    .with_system(color_chosen),
+            )
+            .add_system_set_to_stage(
+                CoreStage::PostUpdate,
+                SystemSet::new()
+                    .with_run_criteria(run_if_in_game)
+                    .with_system(reorganize_hand),
             );
     }
 }
@@ -85,11 +91,16 @@ fn card_played(
     game_assets: Res<GameAssets>,
 ) {
     for CardPlayedEvent(card) in card_played_event.iter() {
-        let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, 0.0);
+        let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, 1.0);
         transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
 
         for entity in discard_query.iter() {
-            commands.entity(entity).despawn();
+            commands
+                .entity(entity)
+                .remove::<Discard>()
+                .insert(ToBeRemoved {
+                    timer: Timer::from_seconds(1.0, false),
+                });
         }
 
         commands
@@ -193,7 +204,7 @@ fn reorganize_hand(
         return;
     }
 
-    #[allow(clippy::never_loop)]
+    // #[allow(clippy::never_loop)]
     for _ in reorganize_hand_event.iter() {
         let window = windows.get_primary().unwrap();
         let card_y = -window.height() / 2.0 + (CARD_HEIGHT * CARD_SCALE) * 0.25;
@@ -202,7 +213,9 @@ fn reorganize_hand(
         let width = window.width() * (1.0 - 2.0 * X_PADDING);
         let part = width / hand.size as f32;
 
+        info!("QUERY SIZE = {}", query.iter().count());
         for (entity, item, mut card_position) in query.iter_mut() {
+            // info!("{:?}, {:?}, {:?}", entity, item, card_position);
             card_position.0.y = card_y;
             card_position.0.x = part * item.index as f32 + part / 2.0 - width / 2.0;
 
@@ -210,7 +223,7 @@ fn reorganize_hand(
         }
 
         // We don't care how many times the event has been queued, we reorganize once
-        break;
+        // break;
     }
 }
 
@@ -293,22 +306,15 @@ fn remove_animation_on_drag(
     }
 }
 
-/*
-fn move_towards(pos: &mut Vec3, dest: &Vec3, speed: f32) -> bool {
-    let diff = *dest - *pos;
-
-    if diff.length() > speed {
-        pos.x += speed * diff.x / diff.length();
-        pos.y += speed * diff.y / diff.length();
-
-        false
-    } else {
-        *pos = *dest;
-
-        true
+pub fn color_chosen(
+    mut server_query: Query<&mut Server>,
+    mut color_chosen_event: EventReader<ColorChosenEvent>,
+) {
+    for ColorChosenEvent(color) in color_chosen_event.iter() {
+        let mut server = server_query.single_mut();
+        write_socket(&mut server.socket, Command::ColorChosen, *color as u8).unwrap();
     }
 }
-*/
 
 pub fn ease_out_sine(t: f32) -> f32 {
     ((t * std::f32::consts::PI) / 2.0).sin()

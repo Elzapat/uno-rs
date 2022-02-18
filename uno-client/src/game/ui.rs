@@ -1,4 +1,5 @@
-use super::{run_if_in_game, ChooseColor, Player, ThisPlayer};
+use super::{run_if_in_game, ChooseColor, ColorChosenEvent, Player, ThisPlayer};
+use crate::utils::constants::{CARD_SCALE, CARD_WIDTH};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use uno::card::Color;
@@ -74,36 +75,37 @@ fn choose_color_window(
     mut commands: Commands,
     egui_context: ResMut<EguiContext>,
     choose_color: Query<Entity, With<ChooseColor>>,
+    mut color_chosen_event: EventWriter<ColorChosenEvent>,
 ) {
     if let Ok(entity) = choose_color.get_single() {
         egui::Window::new(egui::RichText::new("Choose color").strong())
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 50.0])
+            .anchor(
+                egui::Align2::CENTER_CENTER,
+                [0.0, CARD_WIDTH * CARD_SCALE / 2.0 + 30.0],
+            )
             .collapsible(false)
             .resizable(false)
             .show(egui_context.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     const COLORS: [(Color, egui::Color32); 4] = [
-                        (Color::Yellow, egui::Color32::YELLOW),
-                        (Color::Red, egui::Color32::RED),
-                        (Color::Blue, egui::Color32::BLUE),
-                        (Color::Green, egui::Color32::GREEN),
+                        (Color::Yellow, egui::Color32::from_rgb(255, 255, 22)),
+                        (Color::Red, egui::Color32::from_rgb(237, 28, 36)),
+                        (Color::Blue, egui::Color32::from_rgb(0, 114, 188)),
+                        (Color::Green, egui::Color32::from_rgb(80, 170, 68)),
                     ];
                     const CARD_WIDTH: f32 = 30.0;
                     const CARD_HEIGHT: f32 = 46.2;
-                    const CARD_PADDING: f32 = 5.0;
 
-                    let size = egui::Vec2::new(
-                        (CARD_WIDTH + CARD_PADDING) * 4.0 - CARD_PADDING,
-                        CARD_HEIGHT,
-                    );
-                    let (mut rect, _) = ui.allocate_exact_size(size, egui::Sense::click());
-                    rect.set_width(CARD_WIDTH);
+                    for (card_color, egui_color) in COLORS {
+                        let size = egui::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
+                        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
 
-                    for (_card_color, egui_color) in COLORS {
                         ui.painter().rect_filled(rect, 3.0, egui_color);
-                        rect.set_center(
-                            rect.center() + egui::Vec2::new(CARD_WIDTH + CARD_PADDING, 0.0),
-                        );
+
+                        if response.clicked() {
+                            commands.entity(entity).despawn();
+                            color_chosen_event.send(ColorChosenEvent(card_color));
+                        }
                     }
                 });
             });

@@ -6,7 +6,9 @@ pub enum PlayerState {
     PlayingCard,
     ChoosingColorWild,
     ChoosingColorWildFour,
-    CallingUno,
+    ChoosingColorWildUno,
+    ChoosingColorWildFourUno,
+    Uno,
 }
 
 /// Structure to define a Uno player

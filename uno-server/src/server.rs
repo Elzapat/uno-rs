@@ -270,6 +270,7 @@ impl Server {
                 write_socket(&mut client.socket, Command::LobbyCreated, id)?;
             }
         } else if let Some(lobby_id) = start_game {
+            // Get clients in lobby
             let mut clients = self
                 .clients
                 .drain_filter(|client| {
@@ -280,6 +281,11 @@ impl Server {
                     }
                 })
                 .collect::<Vec<Client>>();
+
+            // Tell clients the lobby the game was started in is gone
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::LobbyDestroyed, lobby_id as u8)?;
+            }
 
             self.lobbies.remove(&lobby_id);
 
@@ -292,10 +298,6 @@ impl Server {
                     error!("{e}");
                 }
             }));
-
-            for client in self.clients.iter_mut() {
-                write_socket(&mut client.socket, Command::LobbyDestroyed, lobby_id as u8)?;
-            }
         }
 
         Ok(())
