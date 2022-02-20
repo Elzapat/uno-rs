@@ -213,7 +213,6 @@ fn reorganize_hand(
         let width = window.width() * (1.0 - 2.0 * X_PADDING);
         let part = width / hand.size as f32;
 
-        info!("QUERY SIZE = {}", query.iter().count());
         for (entity, item, mut card_position) in query.iter_mut() {
             // info!("{:?}, {:?}, {:?}", entity, item, card_position);
             card_position.0.y = card_y;

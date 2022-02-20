@@ -1,4 +1,4 @@
-use super::{run_if_in_game, ChooseColor, ColorChosenEvent, Player, ThisPlayer};
+use super::{run_if_in_game, CallUno, ChooseColor, ColorChosenEvent, Player, ThisPlayer};
 use crate::utils::constants::{CARD_SCALE, CARD_WIDTH};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
@@ -96,6 +96,9 @@ fn choose_color_window(
                     const CARD_WIDTH: f32 = 30.0;
                     const CARD_HEIGHT: f32 = 46.2;
 
+                    ui.painter()
+                        .rect_filled(ui.clip_rect(), 0.0, egui::Color32::WHITE);
+
                     for (card_color, egui_color) in COLORS {
                         let size = egui::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
                         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -109,5 +112,22 @@ fn choose_color_window(
                     }
                 });
             });
+    }
+}
+
+fn call_uno_window(
+    mut commands: Commands,
+    egui_context: ResMut<EguiContext>,
+    call_uno: Query<Entity, With<CallUno>>,
+) {
+    if let Ok(entity) = call_uno.get_single() {
+        egui::Window::new(egui::RichText::new("Choose color").strong())
+            .anchor(
+                egui::Align2::CENTER_CENTER,
+                [0.0, CARD_WIDTH * CARD_SCALE / 2.0 + 30.0],
+            )
+            .collapsible(false)
+            .resizable(false)
+            .show(egui_context.ctx(), |ui| {});
     }
 }
