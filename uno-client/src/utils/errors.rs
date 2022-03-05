@@ -8,7 +8,7 @@ pub struct Error {
 
 pub fn display_error(
     mut commands: Commands,
-    egui_context: ResMut<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
     mut query: Query<(Entity, &mut Error)>,
 ) {
     for (entity, error) in query.iter_mut() {
@@ -20,7 +20,7 @@ pub fn display_error(
         .anchor(egui::Align2::CENTER_TOP, [0.0, 100.0])
         .collapsible(false)
         .resizable(false)
-        .show(egui_context.ctx(), |ui| {
+        .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading(&error.message);
                 ui.add_space(10.0);

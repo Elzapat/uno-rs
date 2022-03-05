@@ -8,9 +8,9 @@ pub fn settings_panel(
     mut commands: Commands,
     mut settings: ResMut<Settings>,
     mut server_query: Query<&mut Server>,
-    egui_context: ResMut<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
 ) {
-    egui::TopBottomPanel::top("Settings").show(egui_context.ctx(), |ui| {
+    egui::TopBottomPanel::top("Settings").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
             ui.label(egui::RichText::new("Settings").heading().strong());
         });
@@ -45,7 +45,7 @@ pub fn settings_panel(
 pub fn lobby_panel(
     mut commands: Commands,
     mut server_query: Query<&mut Server>,
-    egui_context: Res<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
@@ -59,7 +59,7 @@ pub fn lobby_panel(
     let mut server = server_query.single_mut();
 
     match lobby_state.current() {
-        LobbyState::LobbiesList => window.show(egui_context.ctx(), |ui| {
+        LobbyState::LobbiesList => window.show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("Lobbies");
             });
@@ -106,7 +106,7 @@ pub fn lobby_panel(
                 }
             });
         }),
-        LobbyState::InLobby => window.show(egui_context.ctx(), |ui| {
+        LobbyState::InLobby => window.show(egui_context.ctx_mut(), |ui| {
             let lobby = match (*current_lobby).as_ref() {
                 Some(l) => l,
                 None => return,
@@ -136,7 +136,7 @@ pub fn lobby_panel(
                 }
             });
         }),
-        _ => window.show(egui_context.ctx(), |ui| {
+        _ => window.show(egui_context.ctx_mut(), |ui| {
             ui.label("This window isn't supposed to show");
         }),
     };
@@ -144,14 +144,14 @@ pub fn lobby_panel(
 
 pub fn unconnected_panel(
     commands: Commands,
-    egui_context: Res<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
     lobby_state: ResMut<State<LobbyState>>,
 ) {
     egui::Window::new("Unconnected")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false)
-        .show(egui_context.ctx(), |ui| {
+        .show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("You're not connected to the server");
                 ui.add_space(10.0);

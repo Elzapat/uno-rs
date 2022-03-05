@@ -1,8 +1,11 @@
-use super::{run_if_in_game, ColorChosenEvent, GameAssets, Player, ThisPlayer, ToBeRemoved};
+use super::{
+    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidation, Player,
+    ThisPlayer, ToBeRemoved,
+};
 use crate::{
     utils::constants::{
-        CARD_ANIMATION_TIME_S, CARD_DROP_ZONE, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH, DECK_POS,
-        DISCARD_POS, Z_INCREASE,
+        BASE_CARD_Z, CARD_ANIMATION_TIME_S, CARD_DROP_ZONE, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH,
+        DECK_POS, DISCARD_POS, DISCARD_Z_INCREASE, Z_INCREASE,
     },
     Draggable, Dragged, Dropped, GameState, Server, SpriteSize,
 };
@@ -47,7 +50,7 @@ pub struct CardsPlugin;
 
 impl Plugin for CardsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CurrentCardZ(Z_INCREASE))
+        app.insert_resource(CurrentCardZ(BASE_CARD_Z))
             .insert_resource(Hand { size: 0 })
             .add_event::<DrawCardEvent>()
             .add_event::<CardPlayedEvent>()
@@ -64,7 +67,8 @@ impl Plugin for CardsPlugin {
                     .with_system(window_resized)
                     .with_system(remove_animation_on_drag)
                     .with_system(play_card)
-                    .with_system(color_chosen),
+                    .with_system(color_chosen)
+                    .with_system(played_card_validation),
             )
             .add_system_set_to_stage(
                 CoreStage::PostUpdate,
@@ -87,14 +91,15 @@ pub fn card_to_spritesheet_index(card: &uno::card::Card) -> usize {
 fn card_played(
     mut commands: Commands,
     mut card_played_event: EventReader<CardPlayedEvent>,
-    discard_query: Query<Entity, With<Discard>>,
+    discard_query: Query<(Entity, &Transform), With<Discard>>,
     game_assets: Res<GameAssets>,
 ) {
     for CardPlayedEvent(card) in card_played_event.iter() {
-        let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, 1.0);
-        transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
+        let mut played_card_z = BASE_CARD_Z;
 
-        for entity in discard_query.iter() {
+        for (entity, transform) in discard_query.iter() {
+            played_card_z = transform.translation.z + DISCARD_Z_INCREASE;
+
             commands
                 .entity(entity)
                 .remove::<Discard>()
@@ -102,6 +107,10 @@ fn card_played(
                     timer: Timer::from_seconds(1.0, false),
                 });
         }
+
+        info!("played_card_z = {played_card_z}");
+        let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, played_card_z);
+        transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
 
         commands
             .spawn_bundle(SpriteSheetBundle {
@@ -115,12 +124,16 @@ fn card_played(
             })
             .insert(Discard)
             .insert(CardAnimation::default())
-            .insert(CardPosition(Vec3::new(DISCARD_POS.0, DISCARD_POS.1, 0.0)));
+            .insert(CardPosition(Vec3::new(
+                DISCARD_POS.0,
+                DISCARD_POS.1,
+                played_card_z,
+            )));
     }
 }
 
 fn setup_cards(mut commands: Commands, game_assets: Res<GameAssets>) {
-    let mut transform = Transform::from_xyz(DECK_POS.0, DECK_POS.1, 0.0);
+    let mut transform = Transform::from_xyz(DECK_POS.0, DECK_POS.1, 0.1);
     transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
 
     let card_back = Card {
@@ -140,7 +153,7 @@ fn setup_cards(mut commands: Commands, game_assets: Res<GameAssets>) {
     });
 
     // Discard for the cards
-    transform.translation = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, 0.0);
+    transform.translation = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, BASE_CARD_Z - 8.0 * Z_INCREASE);
     commands
         .spawn_bundle(SpriteSheetBundle {
             sprite: TextureAtlasSprite {
@@ -204,7 +217,6 @@ fn reorganize_hand(
         return;
     }
 
-    // #[allow(clippy::never_loop)]
     for _ in reorganize_hand_event.iter() {
         let window = windows.get_primary().unwrap();
         let card_y = -window.height() / 2.0 + (CARD_HEIGHT * CARD_SCALE) * 0.25;
@@ -214,15 +226,11 @@ fn reorganize_hand(
         let part = width / hand.size as f32;
 
         for (entity, item, mut card_position) in query.iter_mut() {
-            // info!("{:?}, {:?}, {:?}", entity, item, card_position);
             card_position.0.y = card_y;
             card_position.0.x = part * item.index as f32 + part / 2.0 - width / 2.0;
 
             commands.entity(entity).insert(CardAnimation::default());
         }
-
-        // We don't care how many times the event has been queued, we reorganize once
-        // break;
     }
 }
 
@@ -261,8 +269,7 @@ fn play_card(
     for PlayCardEvent(card) in play_card_event.iter() {
         let mut server = server_query.single_mut();
 
-        write_socket::<uno::packet::Args>(&mut server.socket, Command::PlayCard, (*card).into())
-            .unwrap();
+        write_socket(&mut server.socket, Command::PlayCard, *card).unwrap();
     }
 }
 
@@ -284,6 +291,7 @@ fn animate_card(
             card_position.0,
             ease_out_sine(card_animation.time.as_secs_f32() / CARD_ANIMATION_TIME_S),
         );
+        // transform.translation.z = card_position.0.z;
     }
 }
 
@@ -312,6 +320,84 @@ pub fn color_chosen(
     for ColorChosenEvent(color) in color_chosen_event.iter() {
         let mut server = server_query.single_mut();
         write_socket(&mut server.socket, Command::ColorChosen, *color as u8).unwrap();
+    }
+}
+
+pub fn played_card_validation(
+    mut commands: Commands,
+    mut played_card_validation_event: EventReader<PlayedCardValidation>,
+    mut reorganize_hand_event: EventWriter<ReorganizeHandEvent>,
+    mut card_validation_query: Query<
+        (
+            Entity,
+            &CardComponent,
+            &mut CardPosition,
+            &HandItem,
+            &mut Transform,
+        ),
+        With<CardWaitingForValidation>,
+    >,
+    mut hand_item_query: Query<&mut HandItem, Without<CardWaitingForValidation>>,
+    mut discard_query: Query<
+        (Entity, &Transform),
+        (With<Discard>, Without<CardWaitingForValidation>),
+    >,
+    mut hand: ResMut<Hand>,
+) {
+    for PlayedCardValidation(valid) in played_card_validation_event.iter() {
+        if let Ok((entity, card, mut card_pos, played_card_item, mut played_card_transform)) =
+            card_validation_query.get_single_mut()
+        {
+            commands
+                .entity(entity)
+                .remove::<CardWaitingForValidation>()
+                .insert(CardAnimation::default());
+
+            if !valid {
+                return;
+            }
+
+            let mut played_card_z = BASE_CARD_Z;
+            // Remove the current discard card from the discard in 1 second
+            for (entity, transform) in discard_query.iter_mut() {
+                // Make the Z index of the new discard card a bit higher than the last
+                played_card_z = transform.translation.z + DISCARD_Z_INCREASE;
+                commands
+                    .entity(entity)
+                    .remove::<Discard>()
+                    .insert(ToBeRemoved {
+                        timer: Timer::from_seconds(1.0, false),
+                    });
+            }
+
+            // Set the position of the played card to be on top of the discard
+            info!("played_card_z in card validation = {played_card_z}");
+            card_pos.0 = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, played_card_z);
+            played_card_transform.translation.z = played_card_z;
+
+            // Remove the ability to drag the new card that is now on top of the discard
+            commands
+                .entity(entity)
+                .remove::<Draggable>()
+                .remove::<HandItem>()
+                .insert(Discard);
+
+            hand.size -= 1;
+
+            // Shift all the cards in the hand
+            for mut hand_item in hand_item_query.iter_mut() {
+                info!("index: {}", hand_item.index);
+                if hand_item.index > played_card_item.index {
+                    hand_item.index -= 1;
+                }
+            }
+
+            reorganize_hand_event.send(ReorganizeHandEvent);
+
+            if card.0.color == Color::Black {
+                commands.spawn().insert(ChooseColor);
+            }
+        }
     }
 }
 

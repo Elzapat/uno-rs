@@ -1,6 +1,6 @@
 use crate::{
-    utils::constants::{CARD_HEIGHT, CARD_PADDING, CARD_WIDTH, DISCARD_POS},
-    Draggable, GameState, IncomingPackets,
+    utils::constants::{CARD_HEIGHT, CARD_PADDING, CARD_WIDTH},
+    GameState, IncomingPackets,
 };
 use bevy::{ecs::schedule::ShouldRun, prelude::*};
 use cards::*;
@@ -16,7 +16,7 @@ mod ui;
 pub struct GamePlugin;
 
 // Components
-#[derive(Component, Debug)]
+#[derive(Component)]
 pub struct Player {
     id: Uuid,
     hand_size: usize,
@@ -31,6 +31,10 @@ pub struct ChooseColor;
 #[derive(Component)]
 pub struct CallUno;
 #[derive(Component)]
+pub struct CallCounterUno;
+#[derive(Component)]
+pub struct DrawCard;
+#[derive(Component)]
 pub struct ToBeRemoved {
     timer: Timer,
 }
@@ -44,6 +48,7 @@ pub struct GameAssets {
 // Events
 pub struct StartGameEvent(pub Vec<(Uuid, String)>);
 pub struct ColorChosenEvent(pub Color);
+pub struct PlayedCardValidation(pub bool);
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -51,6 +56,7 @@ impl Plugin for GamePlugin {
             .add_plugin(ui::GameUiPlugin)
             .add_event::<StartGameEvent>()
             .add_event::<ColorChosenEvent>()
+            .add_event::<PlayedCardValidation>()
             .add_startup_system(load_assets)
             .add_system(start_game)
             .add_system_set(
@@ -116,20 +122,12 @@ fn load_assets(
 fn execute_packets(
     mut commands: Commands,
     mut incoming_packets: ResMut<IncomingPackets>,
-    //
-    mut draw_card_event: EventWriter<DrawCardEvent>,
-    //
-    mut reorganize_hand_event: EventWriter<ReorganizeHandEvent>,
-    //
-    mut card_played_event: EventWriter<CardPlayedEvent>,
+    uno_query: Query<Entity, With<CallUno>>,
+    counter_uno_query: Query<Entity, With<CallCounterUno>>,
     mut players_query: Query<(Entity, &mut Player)>,
-    mut card_validation_query: Query<
-        (Entity, &CardComponent, &mut CardPosition, &HandItem),
-        With<CardWaitingForValidation>,
-    >,
-    mut hand_item_query: Query<&mut HandItem, Without<CardWaitingForValidation>>,
-    mut hand: ResMut<Hand>,
-    mut discard_query: Query<(Entity, &mut Transform), With<Discard>>,
+    mut draw_card_event: EventWriter<DrawCardEvent>,
+    mut played_card_validation_event: EventWriter<PlayedCardValidation>,
+    mut card_played_event: EventWriter<CardPlayedEvent>,
 ) {
     let packets = incoming_packets.0.drain(..).collect::<Vec<Packet>>();
 
@@ -139,54 +137,8 @@ fn execute_packets(
             Command::DrawCard => draw_card_event.send(DrawCardEvent(packet.args.into())),
             Command::CardPlayed => card_played_event.send(CardPlayedEvent(packet.args.into())),
             Command::CardValidation => {
-                let valid = *packet.args.get(0).unwrap() != 0;
-
-                if let Ok((entity, card, mut card_pos, played_card_item)) =
-                    card_validation_query.get_single_mut()
-                {
-                    if valid {
-                        card_pos.0 = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, 0.0);
-
-                        for (entity, mut transform) in discard_query.iter_mut() {
-                            transform.translation.z = 0.0;
-                            commands
-                                .entity(entity)
-                                .remove::<Discard>()
-                                .insert(ToBeRemoved {
-                                    timer: Timer::from_seconds(1.0, false),
-                                });
-                        }
-
-                        commands
-                            .entity(entity)
-                            .remove::<Draggable>()
-                            .remove::<HandItem>()
-                            .insert(Discard);
-
-                        hand.size -= 1;
-
-                        for mut hand_item in hand_item_query.iter_mut() {
-                            if hand_item.index > played_card_item.index {
-                                hand_item.index -= 1;
-                            }
-                        }
-
-                        reorganize_hand_event.send(ReorganizeHandEvent);
-
-                        if card.0.color == Color::Black {
-                            commands.spawn().insert(ChooseColor);
-                        }
-
-                        if hand.size == 1 {
-                            commands.spawn().insert(CallUno);
-                        }
-                    }
-
-                    commands
-                        .entity(entity)
-                        .remove::<CardWaitingForValidation>()
-                        .insert(CardAnimation::default());
-                }
+                played_card_validation_event
+                    .send(PlayedCardValidation(*packet.args.get(0).unwrap() != 0));
             }
             Command::PassTurn => {
                 let uuid = Uuid::from_slice(&packet.args.get_range(..)).unwrap();
@@ -214,6 +166,25 @@ fn execute_packets(
                     }
                 }
             }
+            Command::HaveToDrawCard => {
+                commands.spawn().insert(DrawCard);
+            }
+            Command::Uno => {
+                commands.spawn().insert(CallUno);
+            }
+            Command::StopUno => {
+                for entity in uno_query.iter() {
+                    commands.entity(entity).despawn();
+                }
+            }
+            Command::CounterUno => {
+                commands.spawn().insert(CallCounterUno);
+            }
+            Command::StopCounterUno => {
+                for entity in counter_uno_query.iter() {
+                    commands.entity(entity).despawn();
+                }
+            }
             _ => incoming_packets.0.push(packet),
         }
     }
@@ -223,6 +194,7 @@ fn setup(mut commands: Commands, game_assets: Res<GameAssets>) {
     // Game background
     commands.spawn_bundle(SpriteBundle {
         texture: game_assets.background.clone(),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
         ..SpriteBundle::default()
     });
 }

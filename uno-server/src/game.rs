@@ -46,7 +46,7 @@ impl Game {
                 return Ok(());
             }
 
-            self.pass_turn()?;
+            self.pass_turn(false)?;
 
             let mut pass_turn = false;
             while !pass_turn {
@@ -69,14 +69,15 @@ impl Game {
     fn execute_commands(&mut self) -> Result<bool> {
         let mut card_played = None;
         let mut wild_four_played = false;
+        let mut stop_uno = false;
+        let mut stop_counter_uno = false;
+        let mut draw_card = false;
 
         for client in self.clients.iter_mut() {
             for packet in client.incoming_packets.drain(..) {
                 match packet.command {
                     Command::PlayCard => {
-                        if client.player.state == PlayerState::PlayingCard
-                            && client.player.is_playing
-                        {
+                        if client.player.state == PlayerState::PlayingCard {
                             let card: Card = packet.args.as_slice().into();
                             let valid = {
                                 let top_card = self.discard.top().unwrap();
@@ -91,6 +92,8 @@ impl Game {
                             if valid {
                                 card_played = Some(card);
                             }
+                        } else {
+                            write_socket(&mut client.socket, Command::CardValidation, 0)?;
                         }
                     }
                     Command::ColorChosen => {
@@ -107,6 +110,13 @@ impl Game {
                             }
                         }
                     }
+                    Command::DrawCard => {
+                        if client.player.state == PlayerState::DrawingCard {
+                            draw_card = true;
+                        }
+                    }
+                    Command::Uno => stop_counter_uno = true,
+                    Command::CounterUno => stop_uno = true,
                     _ => return Ok(false),
                 }
             }
@@ -123,14 +133,21 @@ impl Game {
             self.discard.add(card);
             self.current_color = card.color;
 
+            let mut in_uno = false;
+            if self.clients[self.turn_index].player.hand.len() == 1 {
+                self.clients[self.turn_index].player.state = PlayerState::Uno;
+                in_uno = true;
+            }
+
             for client in self.clients.iter_mut() {
                 if client.player.state == PlayerState::WaitingToPlay {
                     write_socket(&mut client.socket, Command::CardPlayed, card)?;
+                    if in_uno {
+                        write_socket(&mut client.socket, Command::CounterUno, vec![])?;
+                    }
+                } else if in_uno {
+                    write_socket(&mut client.socket, Command::Uno, vec![])?;
                 }
-            }
-
-            if self.clients[self.turn_index].player.hand.len() == 1 {
-                self.clients[self.turn_index].player.state = PlayerState::Uno;
             }
 
             let pass_turn = match card.value {
@@ -138,13 +155,13 @@ impl Game {
                     self.reverse_turn = !self.reverse_turn;
 
                     if self.clients.len() == 2 {
-                        self.pass_turn()?;
+                        self.pass_turn(true)?;
                     }
 
                     true
                 }
                 Value::DrawTwo => {
-                    self.pass_turn()?;
+                    self.pass_turn(true)?;
                     for _ in 0..2 {
                         let card = self.draw_card();
                         self.clients[self.turn_index].player.hand.push(card);
@@ -158,7 +175,7 @@ impl Game {
                     true
                 }
                 Value::Skip => {
-                    self.pass_turn()?;
+                    self.pass_turn(true)?;
                     true
                 }
                 Value::Wild => {
@@ -182,9 +199,9 @@ impl Game {
                 _ => true,
             };
 
-            return Ok(pass_turn);
+            return Ok(if in_uno { false } else { pass_turn });
         } else if wild_four_played {
-            self.pass_turn()?;
+            self.pass_turn(true)?;
 
             for _ in 0..4 {
                 let card = self.draw_card();
@@ -197,12 +214,42 @@ impl Game {
             }
 
             return Ok(true);
+        } else if stop_uno {
+            // TODO: action if player successfuly calls uno
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::StopUno, vec![])?;
+            }
+        } else if stop_counter_uno {
+            // TODO: action if player failed to call uno
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::StopCounterUno, vec![])?;
+            }
+        } else if draw_card {
+            let card = self.draw_card();
+            self.clients[self.turn_index].player.hand.push(card);
+
+            write_socket(
+                &mut self.clients[self.turn_index].socket,
+                Command::DrawCard,
+                card,
+            )?;
+
+            if self.clients[self.turn_index]
+                .player
+                .can_play(*self.discard.top().unwrap(), self.current_color)
+            {
+                self.clients[self.turn_index].player.state = PlayerState::PlayingCard;
+                return Ok(false);
+            } else {
+                self.clients[self.turn_index].player.state = PlayerState::WaitingToPlay;
+                return Ok(true);
+            }
         }
 
         Ok(false)
     }
 
-    fn pass_turn(&mut self) -> Result {
+    fn pass_turn(&mut self, passing_turn: bool) -> Result {
         if self.reverse_turn {
             if self.turn_index == 0 {
                 self.turn_index = self.clients.len() - 1;
@@ -216,7 +263,6 @@ impl Game {
         let id = self.clients[self.turn_index].id;
         let nb_cards = self.clients[self.turn_index].player.hand.len();
         for client in self.clients.iter_mut() {
-            client.player.is_playing = false;
             client.player.state = PlayerState::WaitingToPlay;
 
             write_socket(&mut client.socket, Command::PassTurn, &id.as_bytes()[..])?;
@@ -227,8 +273,18 @@ impl Game {
             )?;
         }
 
-        self.clients[self.turn_index].player.is_playing = true;
-        self.clients[self.turn_index].player.state = PlayerState::PlayingCard;
+        if !passing_turn {
+            let playing_client = &mut self.clients[self.turn_index];
+            if !playing_client
+                .player
+                .can_play(*self.discard.top().unwrap(), self.current_color)
+            {
+                playing_client.player.state = PlayerState::DrawingCard;
+                write_socket(&mut playing_client.socket, Command::HaveToDrawCard, vec![])?;
+            } else {
+                playing_client.player.state = PlayerState::PlayingCard;
+            }
+        }
 
         Ok(())
     }

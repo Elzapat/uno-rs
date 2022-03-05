@@ -70,6 +70,12 @@ pub struct Card {
     pub value: Value,
 }
 
+impl Card {
+    pub fn new(value: Value, color: Color) -> Card {
+        Card { value, color }
+    }
+}
+
 impl From<(u8, u8)> for Card {
     fn from(card: (u8, u8)) -> Card {
         Card {

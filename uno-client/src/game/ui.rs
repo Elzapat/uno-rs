@@ -1,8 +1,17 @@
-use super::{run_if_in_game, CallUno, ChooseColor, ColorChosenEvent, Player, ThisPlayer};
-use crate::utils::constants::{CARD_SCALE, CARD_WIDTH};
+use super::{
+    run_if_in_game, CallCounterUno, CallUno, ChooseColor, ColorChosenEvent, DrawCard, Player,
+    ThisPlayer,
+};
+use crate::{
+    utils::constants::{CARD_SCALE, CARD_WIDTH},
+    Server,
+};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
-use uno::card::Color;
+use uno::{
+    card::Color,
+    packet::{write_socket, Command},
+};
 
 pub struct GameUiPlugin;
 
@@ -11,17 +20,24 @@ impl Plugin for GameUiPlugin {
         app.add_system_set(
             SystemSet::new()
                 .with_run_criteria(run_if_in_game)
-                .with_system(players_panel)
-                .with_system(choose_color_window),
+                .with_system(players_panel),
+        )
+        .add_system_set_to_stage(
+            CoreStage::PostUpdate,
+            SystemSet::new()
+                .with_run_criteria(run_if_in_game)
+                .with_system(choose_color_window)
+                .with_system(call_uno_window)
+                .with_system(draw_card_window),
         );
     }
 }
 
 fn players_panel(
-    egui_context: ResMut<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
     players_query: Query<(&Player, Option<&ThisPlayer>)>,
 ) {
-    egui::TopBottomPanel::top("Players").show(egui_context.ctx(), |ui| {
+    egui::TopBottomPanel::top("Players").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
             let size = players_query.iter().count();
 
@@ -73,7 +89,7 @@ fn players_panel(
 
 fn choose_color_window(
     mut commands: Commands,
-    egui_context: ResMut<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
     choose_color: Query<Entity, With<ChooseColor>>,
     mut color_chosen_event: EventWriter<ColorChosenEvent>,
 ) {
@@ -85,7 +101,7 @@ fn choose_color_window(
             )
             .collapsible(false)
             .resizable(false)
-            .show(egui_context.ctx(), |ui| {
+            .show(egui_context.ctx_mut(), |ui| {
                 ui.horizontal(|ui| {
                     const COLORS: [(Color, egui::Color32); 4] = [
                         (Color::Yellow, egui::Color32::from_rgb(255, 255, 22)),
@@ -95,9 +111,6 @@ fn choose_color_window(
                     ];
                     const CARD_WIDTH: f32 = 30.0;
                     const CARD_HEIGHT: f32 = 46.2;
-
-                    ui.painter()
-                        .rect_filled(ui.clip_rect(), 0.0, egui::Color32::WHITE);
 
                     for (card_color, egui_color) in COLORS {
                         let size = egui::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
@@ -117,17 +130,118 @@ fn choose_color_window(
 
 fn call_uno_window(
     mut commands: Commands,
-    egui_context: ResMut<EguiContext>,
+    mut egui_context: ResMut<EguiContext>,
+    mut server_query: Query<&mut Server>,
     call_uno: Query<Entity, With<CallUno>>,
+    call_counter_uno: Query<Entity, With<CallCounterUno>>,
 ) {
     if let Ok(entity) = call_uno.get_single() {
-        egui::Window::new(egui::RichText::new("Choose color").strong())
-            .anchor(
-                egui::Align2::CENTER_CENTER,
-                [0.0, CARD_WIDTH * CARD_SCALE / 2.0 + 30.0],
-            )
-            .collapsible(false)
-            .resizable(false)
-            .show(egui_context.ctx(), |ui| {});
+        button_window(
+            egui_context.ctx_mut(),
+            "Uno!",
+            egui::Align2::RIGHT_CENTER,
+            egui::Vec2::new(-50.0, 0.0),
+            || {
+                let mut server = server_query.single_mut();
+                write_socket(&mut server.socket, Command::Uno, vec![]).unwrap();
+                commands.entity(entity).despawn();
+            },
+        );
+    } else if let Ok(entity) = call_counter_uno.get_single() {
+        button_window(
+            egui_context.ctx_mut(),
+            "Counter Uno!",
+            egui::Align2::RIGHT_CENTER,
+            egui::Vec2::new(-50.0, 0.0),
+            || {
+                let mut server = server_query.single_mut();
+                write_socket(&mut server.socket, Command::Uno, vec![]).unwrap();
+                commands.entity(entity).despawn();
+            },
+        );
     }
+}
+
+fn draw_card_window(
+    mut commands: Commands,
+    mut egui_context: ResMut<EguiContext>,
+    draw_card_query: Query<Entity, With<DrawCard>>,
+    mut server_query: Query<&mut Server>,
+) {
+    if let Ok(entity) = draw_card_query.get_single() {
+        button_window(
+            egui_context.ctx_mut(),
+            "Draw card",
+            egui::Align2::LEFT_CENTER,
+            egui::Vec2::new(50.0, 0.0),
+            || {
+                let mut server = server_query.single_mut();
+                write_socket(&mut server.socket, Command::DrawCard, vec![]).unwrap();
+                commands.entity(entity).despawn();
+            },
+        );
+    }
+}
+
+fn button_window(
+    ctx: &egui::CtxRef,
+    text: &str,
+    align: egui::Align2,
+    offset: egui::Vec2,
+    on_click: impl FnOnce(),
+) {
+    egui::Window::new(egui::RichText::new(text).strong())
+        .anchor(align, offset)
+        .frame(egui::Frame {
+            margin: egui::Vec2::ZERO,
+            ..egui::Frame::default()
+        })
+        .collapsible(false)
+        .resizable(false)
+        .title_bar(false)
+        .show(ctx, |ui| {
+            if ui.add(button(text)).clicked() {
+                on_click();
+            }
+        });
+}
+
+// Small reimplentation of egui::Button so I can make a big button. Most of the code of this
+// function is copied from the source code of egui::Button
+fn custom_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    const BUTTON_PADDING: egui::Vec2 = egui::Vec2::new(100.0, 25.0);
+
+    let text = egui::WidgetText::RichText(
+        egui::RichText::new(text)
+            .text_style(egui::TextStyle::Heading)
+            .strong(),
+    );
+
+    let wrap_width = ui.available_width() - (2.0 * BUTTON_PADDING).x;
+    let text = text.into_galley(ui, None, wrap_width, egui::TextStyle::Button);
+    let desired_size = text.size() + 2.0 * BUTTON_PADDING;
+
+    let (rect, response) = ui.allocate_at_least(desired_size, egui::Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let visuals = *ui.style().interact(&response);
+        let text_pos = ui
+            .layout()
+            .align_size_within_rect(text.size(), rect.shrink2(BUTTON_PADDING))
+            .min;
+
+        ui.painter().rect(
+            rect.expand(visuals.expansion),
+            visuals.corner_radius,
+            visuals.bg_fill,
+            visuals.bg_stroke,
+        );
+        ui.vertical_centered(|ui| text.paint_with_visuals(ui.painter(), text_pos, &visuals));
+    }
+
+    response
+}
+
+fn button(text: &str) -> impl egui::Widget + '_ {
+    move |ui: &mut egui::Ui| custom_button(ui, text)
 }
