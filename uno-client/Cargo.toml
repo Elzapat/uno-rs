@@ -4,12 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.6"
-bevy_ecs = "0.6"
 bevy_egui = "0.11"
 uuid = "0.8"
 itertools = "0.10"
 uno = { path = "../uno" }
+wgpu = { version = "0.12.0", features = ["spirv", "webgl"] } 
+
+[dependencies.bevy]
+version = "0.6.1"
+default-features = false
+features = [
+  "bevy_winit",
+  "render",
+  "png",
+  "hdr",
+  "x11",
+  "filesystem_watcher",
+]
 
 # [dependencies.wgpu-hal]
 # version = "0.12.4"
@@ -18,3 +29,9 @@ uno = { path = "../uno" }
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.79"
+# wgpu = { version = "0.12", features = ["spirv", "webgl", "emscripten"] } 
+# wgpu = { git = "https://github.com/gfx-rs/wgpu/tree/master/wgpu", commit = "b19000367c15ebc3f4aa51871e6d6b9b670126f8", features = ["emscripten"] }
+# wgpu-hal = { version = "0.12.4", features = ["emscripten"] }
+
+# [replace]
+# "wgpu:0.12.0" = { git = "https://github.com/gfx-rs/wgpu/tree/master/wgpu", commit = "b19000367c15ebc3f4aa51871e6d6b9b670126f8", features = ["emscripten"] }
