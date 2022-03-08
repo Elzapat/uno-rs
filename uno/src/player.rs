@@ -33,12 +33,9 @@ impl Player {
 
     /// Check whether the player can play with his current hand
     pub fn can_play(&self, top_card: Card, current_color: Color) -> bool {
-        self.hand.iter().any(|card| {
-            card.color == top_card.color
-                || card.value == top_card.value
-                || card.color == Color::Black
-                || (card.color == current_color && top_card.color == Color::Black)
-        })
+        self.hand
+            .iter()
+            .any(|card| card.can_be_played(top_card, current_color))
     }
 }
 

@@ -1,3 +1,5 @@
+#![recursion_limit = "1000000"]
+
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 mod game;
@@ -7,6 +9,7 @@ pub mod utils;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use std::net::TcpStream;
+use std::{net::SocketAddr, time::Duration};
 use uno::packet::{read_socket, Packet};
 use utils::drag_and_drop::*;
 
@@ -40,8 +43,8 @@ fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
             title: "Uno!".to_owned(),
-            width: 1920.0,
-            height: 1080.0,
+            // width: 1920.0,
+            // height: 1080.0,
             vsync: false,
             ..WindowDescriptor::default()
         })

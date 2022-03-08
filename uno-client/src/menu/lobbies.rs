@@ -7,7 +7,10 @@ use uno::packet::{Command, Packet, ARG_DELIMITER};
 use uuid::Uuid;
 
 pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbyState>>) {
-    let socket = match TcpStream::connect("127.0.0.1:2905") {
+    let socket = match TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], 2905)),
+        std::time::Duration::from_secs(2),
+    ) {
         Ok(s) => s,
         Err(e) => {
             commands.spawn().insert(Error {

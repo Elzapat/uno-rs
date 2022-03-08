@@ -74,6 +74,14 @@ impl Card {
     pub fn new(value: Value, color: Color) -> Card {
         Card { value, color }
     }
+
+    pub fn can_be_played(&self, top_card: Card, current_color: Color) -> bool {
+        // The first condition is useless but keeping it just in case
+        self.color == top_card.color
+            || self.value == top_card.value
+            || self.color == Color::Black
+            || (self.color == current_color && top_card.color == Color::Black)
+    }
 }
 
 impl From<(u8, u8)> for Card {

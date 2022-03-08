@@ -50,6 +50,18 @@ impl Server {
         let mut server = Server::new()?;
         server.listener.set_nonblocking(true)?;
 
+        /*
+        use std::{net::UdpSocket, time::Duration};
+        let socket = UdpSocket::bind("0.0.0.0:2905").unwrap();
+        let mut buff = [0; 1000];
+        let (amt, src) = socket.recv_from(&mut buff).unwrap();
+
+        let buff = &mut buff[..amt];
+        buff.reverse();
+        socket.send_to(buff, &src).unwrap();
+        println!("{buff:?}");
+        */
+
         loop {
             server.new_connections()?;
             server.read_sockets()?;

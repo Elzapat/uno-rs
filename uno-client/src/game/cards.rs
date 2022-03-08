@@ -1,5 +1,5 @@
 use super::{
-    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidation, Player,
+    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent, Player,
     ThisPlayer, ToBeRemoved,
 };
 use crate::{
@@ -108,7 +108,6 @@ fn card_played(
                 });
         }
 
-        info!("played_card_z = {played_card_z}");
         let mut transform = Transform::from_xyz(2000.0, DECK_POS.1, played_card_z);
         transform.scale = Vec3::new(CARD_SCALE, CARD_SCALE, 1.0);
 
@@ -211,7 +210,7 @@ fn reorganize_hand(
     mut reorganize_hand_event: EventReader<ReorganizeHandEvent>,
     windows: Res<Windows>,
     hand: Res<Hand>,
-    mut query: Query<(Entity, &HandItem, &mut CardPosition)>,
+    mut query: Query<(Entity, &mut HandItem, &mut CardPosition)>,
 ) {
     if hand.size == 0 {
         return;
@@ -230,6 +229,15 @@ fn reorganize_hand(
             card_position.0.x = part * item.index as f32 + part / 2.0 - width / 2.0;
 
             commands.entity(entity).insert(CardAnimation::default());
+        }
+
+        // Check if any index is missing, to not create a hole in the player's hand
+        let max_index = query.iter().map(|(_, item, _)| item.index).max().unwrap();
+        if max_index >= hand.size {
+            for (idx, (_, mut item, mut card_position)) in query.iter_mut().enumerate() {
+                item.index = idx;
+                card_position.0.z = BASE_CARD_Z + idx as f32 * Z_INCREASE;
+            }
         }
     }
 }
@@ -325,7 +333,7 @@ pub fn color_chosen(
 
 pub fn played_card_validation(
     mut commands: Commands,
-    mut played_card_validation_event: EventReader<PlayedCardValidation>,
+    mut played_card_validation_event: EventReader<PlayedCardValidationEvent>,
     mut reorganize_hand_event: EventWriter<ReorganizeHandEvent>,
     mut card_validation_query: Query<
         (
@@ -344,7 +352,7 @@ pub fn played_card_validation(
     >,
     mut hand: ResMut<Hand>,
 ) {
-    for PlayedCardValidation(valid) in played_card_validation_event.iter() {
+    for PlayedCardValidationEvent(valid) in played_card_validation_event.iter() {
         if let Ok((entity, card, mut card_pos, played_card_item, mut played_card_transform)) =
             card_validation_query.get_single_mut()
         {
@@ -371,7 +379,6 @@ pub fn played_card_validation(
             }
 
             // Set the position of the played card to be on top of the discard
-            info!("played_card_z in card validation = {played_card_z}");
             card_pos.0 = Vec3::new(DISCARD_POS.0, DISCARD_POS.1, played_card_z);
             played_card_transform.translation.z = played_card_z;
 
@@ -386,7 +393,6 @@ pub fn played_card_validation(
 
             // Shift all the cards in the hand
             for mut hand_item in hand_item_query.iter_mut() {
-                info!("index: {}", hand_item.index);
                 if hand_item.index > played_card_item.index {
                     hand_item.index -= 1;
                 }

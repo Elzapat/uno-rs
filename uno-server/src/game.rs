@@ -6,6 +6,7 @@ use uno::{
     player::PlayerState,
     prelude::*,
 };
+use uuid::Uuid;
 
 // enum GameState {
 //     Playing,
@@ -46,6 +47,11 @@ impl Game {
                 return Ok(());
             }
 
+            if let Some(winner_uuid) = self.check_if_game_end() {
+                self.game_end(winner_uuid)?;
+                return Ok(());
+            }
+
             self.pass_turn(false)?;
 
             let mut pass_turn = false;
@@ -79,13 +85,8 @@ impl Game {
                     Command::PlayCard => {
                         if client.player.state == PlayerState::PlayingCard {
                             let card: Card = packet.args.as_slice().into();
-                            let valid = {
-                                let top_card = self.discard.top().unwrap();
-
-                                self.current_color == card.color
-                                    || top_card.value == card.value
-                                    || card.color == Color::Black
-                            };
+                            let valid = card
+                                .can_be_played(*self.discard.top().unwrap(), self.current_color);
 
                             write_socket(&mut client.socket, Command::CardValidation, valid as u8)?;
 
@@ -99,6 +100,8 @@ impl Game {
                     Command::ColorChosen => {
                         if client.player.state == PlayerState::ChoosingColorWild
                             || client.player.state == PlayerState::ChoosingColorWildFour
+                            || client.player.state == PlayerState::ChoosingColorWildUno
+                            || client.player.state == PlayerState::ChoosingColorWildFourUno
                         {
                             let color: Color = (*packet.args.get(0).unwrap()).into();
                             self.current_color = color;
@@ -115,30 +118,43 @@ impl Game {
                             draw_card = true;
                         }
                     }
-                    Command::Uno => stop_counter_uno = true,
-                    Command::CounterUno => stop_uno = true,
+                    Command::Uno => stop_uno = true,
+                    Command::CounterUno => stop_counter_uno = true,
                     _ => return Ok(false),
                 }
             }
         }
 
         if let Some(card) = card_played {
-            let card_idx = self.clients[self.turn_index]
+            let card_idx = if let Some(card_idx) = self.clients[self.turn_index]
                 .player
                 .hand
                 .iter()
                 .position(|&c| c == card)
-                .unwrap();
+            {
+                card_idx
+            } else {
+                return Ok(false);
+            };
+
             self.clients[self.turn_index].player.hand.remove(card_idx);
             self.discard.add(card);
             self.current_color = card.color;
 
             let mut in_uno = false;
             if self.clients[self.turn_index].player.hand.len() == 1 {
-                self.clients[self.turn_index].player.state = PlayerState::Uno;
+                if self.clients[self.turn_index].player.state == PlayerState::ChoosingColorWild {
+                    self.clients[self.turn_index].player.state = PlayerState::ChoosingColorWildUno;
+                } else if self.clients[self.turn_index].player.state
+                    == PlayerState::ChoosingColorWildFour
+                {
+                    self.clients[self.turn_index].player.state =
+                        PlayerState::ChoosingColorWildFourUno;
+                } else {
+                    self.clients[self.turn_index].player.state = PlayerState::Uno;
+                }
                 in_uno = true;
             }
-
             for client in self.clients.iter_mut() {
                 if client.player.state == PlayerState::WaitingToPlay {
                     write_socket(&mut client.socket, Command::CardPlayed, card)?;
@@ -215,15 +231,29 @@ impl Game {
 
             return Ok(true);
         } else if stop_uno {
-            // TODO: action if player successfuly calls uno
             for client in self.clients.iter_mut() {
                 write_socket(&mut client.socket, Command::StopUno, vec![])?;
-            }
-        } else if stop_counter_uno {
-            // TODO: action if player failed to call uno
-            for client in self.clients.iter_mut() {
                 write_socket(&mut client.socket, Command::StopCounterUno, vec![])?;
             }
+
+            return Ok(true);
+        } else if stop_counter_uno {
+            for client in self.clients.iter_mut() {
+                write_socket(&mut client.socket, Command::StopUno, vec![])?;
+                write_socket(&mut client.socket, Command::StopCounterUno, vec![])?;
+            }
+
+            for _ in 0..2 {
+                let card = self.draw_card();
+                self.clients[self.turn_index].player.hand.push(card);
+                write_socket(
+                    &mut self.clients[self.turn_index].socket,
+                    Command::DrawCard,
+                    card,
+                )?;
+            }
+
+            return Ok(true);
         } else if draw_card {
             let card = self.draw_card();
             self.clients[self.turn_index].player.hand.push(card);
@@ -270,6 +300,11 @@ impl Game {
                 &mut client.socket,
                 Command::HandSize,
                 [&[nb_cards as u8], &id.as_bytes()[..]].concat(),
+            )?;
+            write_socket(
+                &mut client.socket,
+                Command::CurrentColor,
+                self.current_color as u8,
             )?;
         }
 
@@ -381,5 +416,56 @@ impl Game {
         }
 
         self.deck.draw().unwrap()
+    }
+
+    fn check_if_game_end(&self) -> Option<Uuid> {
+        for client in self.clients.iter() {
+            if client.player.hand.is_empty() {
+                return Some(client.id);
+            }
+        }
+
+        None
+    }
+
+    fn game_end(&mut self, winner_uuid: Uuid) -> Result {
+        self.compute_scores()?;
+
+        for client in self.clients.iter_mut() {
+            write_socket(
+                &mut client.socket,
+                Command::GameEnd,
+                &winner_uuid.as_bytes()[..],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn compute_scores(&mut self) -> Result {
+        let mut player_scores = vec![];
+
+        for client in self.clients.iter_mut() {
+            for card in client.player.hand.iter() {
+                client.player.score += match card.value {
+                    Value::Wild | Value::WildFour => 50,
+                    Value::Reverse | Value::DrawTwo | Value::Skip => 20,
+                    Value::Zero => 0,
+                    value => value as u32,
+                }
+            }
+
+            player_scores.push((client.id, client.player.score));
+        }
+
+        for (client, (uuid, score)) in self.clients.iter_mut().zip(player_scores.iter()) {
+            write_socket(
+                &mut client.socket,
+                Command::PlayerScore,
+                [&uuid.as_bytes()[..], score.to_string().as_bytes()].concat(),
+            )?;
+        }
+
+        Ok(())
     }
 }
