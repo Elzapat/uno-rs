@@ -1,10 +1,11 @@
-use crate::error::{Error, Result, UnoError};
+use crate::error::UnoError;
+use anyhow::Result;
 use std::{
-    io::{Read, Write},
     iter::FromIterator,
     net::TcpStream,
     ops::{Bound, RangeBounds},
 };
+use tungstenite::{Message, WebSocket};
 
 /// Delimiter between packets
 pub const PACKET_DELIMITER: u8 = 255;
@@ -25,40 +26,26 @@ pub fn parse_packet(mut packet: Vec<u8>) -> Packet {
     }
 }
 
-pub fn read_socket(socket: &mut TcpStream) -> Result<Vec<Packet>> {
-    let mut buffer = [0; 128];
-    let size = socket.read(&mut buffer)?;
-
-    if size < 1 {
-        return Err(Error::UnoError(UnoError::Disconnected));
+pub fn read_socket(socket: &mut WebSocket<TcpStream>) -> Result<Packet> {
+    if let Message::Binary(packet) = socket.read_message()? {
+        Ok(parse_packet(packet))
+    } else {
+        Err(anyhow::Error::new(UnoError::MessageNotBinary))
     }
-
-    let mut current_packet = Vec::new();
-    let mut packets = Vec::new();
-
-    for byte in buffer.into_iter().take(size) {
-        if PACKET_DELIMITER == byte {
-            packets.push(parse_packet(current_packet.drain(..).collect()));
-        } else {
-            current_packet.push(byte);
-        }
-    }
-
-    Ok(packets)
 }
 
-pub fn write_socket<A>(socket: &mut TcpStream, command: Command, args: A) -> Result<()>
+pub fn write_socket<A>(socket: &mut WebSocket<TcpStream>, command: Command, args: A) -> Result<()>
 where
     A: Into<Args>,
 {
-    socket.write_all(
-        &[
+    socket.write_message(Message::Binary(
+        [
             &[command as u8],
             args.into().as_slice(),
             &[PACKET_DELIMITER],
         ]
         .concat(),
-    )?;
+    ))?;
 
     Ok(())
 }

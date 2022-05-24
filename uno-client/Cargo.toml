@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy_egui = "0.11"
-uuid = "0.8"
+bevy_egui = "0.14"
+uuid = "1.0"
 itertools = "0.10"
 uno = { path = "../uno" }
-wgpu = { version = "0.12.0", features = ["spirv", "webgl"] } 
+tungstenite = "0.17"
+# wgpu = { version = "0.12.0", features = ["spirv", "webgl"] } 
 
 [dependencies.bevy]
-version = "0.6.1"
+version = "0.7"
 default-features = false
 features = [
   "bevy_winit",
@@ -32,6 +33,3 @@ wasm-bindgen = "0.2.79"
 # wgpu = { version = "0.12", features = ["spirv", "webgl", "emscripten"] } 
 # wgpu = { git = "https://github.com/gfx-rs/wgpu/tree/master/wgpu", commit = "b19000367c15ebc3f4aa51871e6d6b9b670126f8", features = ["emscripten"] }
 # wgpu-hal = { version = "0.12.4", features = ["emscripten"] }
-
-# [replace]
-# "wgpu:0.12.0" = { git = "https://github.com/gfx-rs/wgpu/tree/master/wgpu", commit = "b19000367c15ebc3f4aa51871e6d6b9b670126f8", features = ["emscripten"] }

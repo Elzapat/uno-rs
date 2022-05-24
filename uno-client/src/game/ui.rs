@@ -59,6 +59,7 @@ fn end_game_lobby(
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .min_width(700.0)
+        .min_height(400.0)
         .collapsible(false)
         .resizable(false)
         .show(egui_context.ctx_mut(), |ui| {
@@ -102,6 +103,16 @@ fn end_game_lobby(
 
                 ui.separator();
             }
+
+            ui.vertical_centered(|ui| {
+                if ui.button("Replay").clicked() {
+                    todo!();
+                }
+
+                if ui.button("Back to menu").clicked() {
+                    todo!();
+                }
+            })
         });
 }
 
@@ -223,7 +234,7 @@ fn draw_card_window(
 }
 
 fn button_window(
-    ctx: &egui::CtxRef,
+    ctx: &egui::Context,
     text: &str,
     align: egui::Align2,
     offset: egui::Vec2,
@@ -232,7 +243,8 @@ fn button_window(
     egui::Window::new(egui::RichText::new(text).strong())
         .anchor(align, offset)
         .frame(egui::Frame {
-            margin: egui::Vec2::ZERO,
+            inner_margin: egui::style::Margin::same(0.0),
+            outer_margin: egui::style::Margin::same(0.0),
             ..egui::Frame::default()
         })
         .collapsible(false)
@@ -304,7 +316,7 @@ fn custom_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
 
         ui.painter().rect(
             rect.expand(visuals.expansion),
-            visuals.corner_radius,
+            visuals.rounding,
             visuals.bg_fill,
             visuals.bg_stroke,
         );

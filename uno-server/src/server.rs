@@ -1,4 +1,5 @@
 use crate::{client::Client, game::Game};
+use anyhow::Result;
 use log::{error, info};
 use std::{
     collections::HashMap,
@@ -6,10 +7,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     thread,
 };
-use uno::{
-    packet::{read_socket, write_socket, Command, ARG_DELIMITER},
-    prelude::*,
-};
+use uno::packet::{read_socket, write_socket, Command, ARG_DELIMITER};
 use uuid::Uuid;
 
 const MAX_LOBBY_PLAYERS: usize = 10;
@@ -46,7 +44,7 @@ impl Server {
         })
     }
 
-    pub fn run() -> Result {
+    pub fn run() -> Result<()> {
         let mut server = Server::new()?;
         server.listener.set_nonblocking(true)?;
 
@@ -69,54 +67,52 @@ impl Server {
         }
     }
 
-    fn new_connections(&mut self) -> Result {
-        match self.listener.accept() {
-            Ok((socket, ip)) => {
-                socket.set_nonblocking(true)?;
-                info!("New connection: {}", ip);
+    fn new_connections(&mut self) -> Result<()> {
+        for stream in self.listener.incoming() {
+            let stream = match stream {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
 
-                // Send all lobbies info to the new client
-                let mut infos = vec![];
-                for (id, lobby) in &self.lobbies {
-                    infos.push(*id as u8);
-                    infos.push(lobby.players.len() as u8);
-                }
+            let websocket = tungstenite::accept(stream)?;
 
-                let mut client = Client::new(socket);
-                write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
-                self.clients.push(client);
+            // Send all lobbies info to the new client
+            let mut infos = vec![];
+            for (id, lobby) in &self.lobbies {
+                infos.push(*id as u8);
+                infos.push(lobby.players.len() as u8);
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => error!("{}", e),
-        };
+
+            let mut client = Client::new(websocket);
+            write_socket(&mut client.socket, Command::LobbiesInfo, infos)?;
+            self.clients.push(client);
+        }
 
         Ok(())
     }
 
-    fn read_sockets(&mut self) -> Result {
+    fn read_sockets(&mut self) -> Result<()> {
         let mut to_remove = None;
 
         for (i, client) in self.clients.iter_mut().enumerate() {
-            client.incoming_packets = match read_socket(&mut client.socket) {
-                Ok(packets) => {
-                    info!("{:?}", packets);
-                    packets
-                }
-                Err(e) => {
-                    if let Error::IoError(e) = e {
-                        if e.kind() == std::io::ErrorKind::WouldBlock {
+            client
+                .incoming_packets
+                .push(match read_socket(&mut client.socket) {
+                    Ok(packets) => {
+                        info!("{:?}", packets);
+                        packets
+                    }
+                    Err(e) => {
+                        if let Some(tungstenite::Error::ConnectionClosed) =
+                            e.downcast_ref::<tungstenite::Error>()
+                        {
+                            to_remove = Some(i);
                             continue;
                         } else {
-                            return Err(Error::IoError(e));
+                            return Err(e);
                         }
-                    } else if let Error::UnoError(uno::error::UnoError::Disconnected) = e {
-                        to_remove = Some(i);
-                        continue;
-                    } else {
-                        return Err(e);
                     }
-                }
-            };
+                });
         }
 
         if let Some(i) = to_remove {
@@ -140,7 +136,7 @@ impl Server {
         Ok(())
     }
 
-    fn execute_commands(&mut self) -> Result {
+    fn execute_commands(&mut self) -> Result<()> {
         let mut player_left = None;
         let mut player_joined = None;
         let mut lobby_created = None;

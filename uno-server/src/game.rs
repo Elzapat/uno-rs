@@ -1,4 +1,5 @@
 use crate::client::Client;
+use anyhow::Result;
 use log::{error, info};
 use uno::{
     card::{Color, Value},
@@ -36,7 +37,7 @@ impl Game {
         }
     }
 
-    pub fn run(&mut self) -> Result {
+    pub fn run(mut self) -> Result<Vec<Client>> {
         self.send_player_ids()?;
         self.deck.shuffle();
         self.give_first_cards()?;
@@ -44,12 +45,12 @@ impl Game {
 
         loop {
             if self.clients.is_empty() {
-                return Ok(());
+                return Ok(self.clients);
             }
 
             if let Some(winner_uuid) = self.check_if_game_end() {
                 self.game_end(winner_uuid)?;
-                return Ok(());
+                return Ok(self.clients);
             }
 
             self.pass_turn(false)?;
@@ -279,7 +280,7 @@ impl Game {
         Ok(false)
     }
 
-    fn pass_turn(&mut self, passing_turn: bool) -> Result {
+    fn pass_turn(&mut self, passing_turn: bool) -> Result<()> {
         if self.reverse_turn {
             if self.turn_index == 0 {
                 self.turn_index = self.clients.len() - 1;
@@ -324,30 +325,28 @@ impl Game {
         Ok(())
     }
 
-    fn read_sockets(&mut self) -> Result {
+    fn read_sockets(&mut self) -> Result<()> {
         let mut to_remove = None;
 
         for (i, client) in self.clients.iter_mut().enumerate() {
-            client.incoming_packets = match read_socket(&mut client.socket) {
-                Ok(packets) => {
-                    info!("{:?}", packets);
-                    packets
-                }
-                Err(e) => {
-                    if let Error::IoError(e) = e {
-                        if e.kind() == std::io::ErrorKind::WouldBlock {
+            client
+                .incoming_packets
+                .push(match read_socket(&mut client.socket) {
+                    Ok(packets) => {
+                        info!("{:?}", packets);
+                        packets
+                    }
+                    Err(e) => {
+                        if let Some(tungstenite::Error::ConnectionClosed) =
+                            e.downcast_ref::<tungstenite::Error>()
+                        {
+                            to_remove = Some(i);
                             continue;
                         } else {
-                            return Err(Error::IoError(e));
+                            return Err(e);
                         }
-                    } else if let Error::UnoError(uno::error::UnoError::Disconnected) = e {
-                        to_remove = Some(i);
-                        continue;
-                    } else {
-                        return Err(e);
                     }
-                }
-            };
+                });
         }
 
         if let Some(i) = to_remove {
@@ -359,7 +358,7 @@ impl Game {
         Ok(())
     }
 
-    fn send_player_ids(&mut self) -> Result {
+    fn send_player_ids(&mut self) -> Result<()> {
         for client in self.clients.iter_mut() {
             write_socket(
                 &mut client.socket,
@@ -371,7 +370,7 @@ impl Game {
         Ok(())
     }
 
-    fn draw_first_card(&mut self) -> Result {
+    fn draw_first_card(&mut self) -> Result<()> {
         let mut first_card = self.draw_card();
         while first_card.color == Color::Black
             || first_card.value == Value::Skip
@@ -391,7 +390,7 @@ impl Game {
         Ok(())
     }
 
-    fn give_first_cards(&mut self) -> Result {
+    fn give_first_cards(&mut self) -> Result<()> {
         // Deal the initial seven cards to the players
         const INITIAL_CARDS: usize = 7;
         for client in self.clients.iter_mut() {
@@ -428,7 +427,7 @@ impl Game {
         None
     }
 
-    fn game_end(&mut self, winner_uuid: Uuid) -> Result {
+    fn game_end(&mut self, winner_uuid: Uuid) -> Result<()> {
         self.compute_scores()?;
 
         for client in self.clients.iter_mut() {
@@ -442,7 +441,7 @@ impl Game {
         Ok(())
     }
 
-    fn compute_scores(&mut self) -> Result {
+    fn compute_scores(&mut self) -> Result<()> {
         let mut player_scores = vec![];
 
         for client in self.clients.iter_mut() {

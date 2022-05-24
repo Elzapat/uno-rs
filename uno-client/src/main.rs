@@ -1,5 +1,3 @@
-#![recursion_limit = "1000000"]
-
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
 mod game;
@@ -9,7 +7,7 @@ pub mod utils;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use std::net::TcpStream;
-use std::{net::SocketAddr, time::Duration};
+use tungstenite::WebSocket;
 use uno::packet::{read_socket, Packet};
 use utils::drag_and_drop::*;
 
@@ -29,7 +27,7 @@ pub struct SpriteSize {
 }
 #[derive(Debug, Component)]
 pub struct Server {
-    socket: TcpStream,
+    socket: WebSocket<TcpStream>,
 }
 
 // Resources
@@ -37,6 +35,7 @@ pub struct Settings {
     username: String,
     enable_animations: bool,
 }
+#[derive(Deref, DerefMut)]
 pub struct IncomingPackets(Vec<Packet>);
 
 fn main() {
@@ -45,7 +44,7 @@ fn main() {
             title: "Uno!".to_owned(),
             // width: 1920.0,
             // height: 1080.0,
-            vsync: false,
+            // vsync: false,
             ..WindowDescriptor::default()
         })
         .insert_resource(IncomingPackets(Vec::new()))
@@ -72,8 +71,8 @@ pub fn read_server_socket(
     mut incoming_packets: ResMut<IncomingPackets>,
 ) {
     if let Ok(mut server) = server_query.get_single_mut() {
-        if let Ok(mut packets) = read_socket(&mut server.socket) {
-            incoming_packets.0.append(&mut packets);
+        if let Ok(packet) = read_socket(&mut server.socket) {
+            incoming_packets.push(packet);
         }
     }
 }

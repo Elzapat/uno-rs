@@ -6,5 +6,5 @@ members = [
     "uno-server",
 ]
 
-[replace]
-"wgpu:0.12.0" = { git = "https://github.com/gfx-rs/wgpu" }
+# [replace]
+# "wgpu:0.12.0" = { git = "https://github.com/gfx-rs/wgpu" }

@@ -7,11 +7,18 @@ use uno::packet::{Command, Packet, ARG_DELIMITER};
 use uuid::Uuid;
 
 pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbyState>>) {
-    let socket = match TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], 2905)),
-        std::time::Duration::from_secs(2),
-    ) {
-        Ok(s) => s,
+    // let stream = match TcpStream::connect("127.0.0.1:2905") {
+    //     Ok(s) => s,
+    //     Err(e) => {
+    //         commands.spawn().insert(Error {
+    //             message: format!("Couldn't connect to server ({}).\n\nYou can try reconnecting, or try another time because the service might be down.", e),
+    //         });
+    //         return;
+    //     }
+    // };
+
+    let socket = match tungstenite::connect("ws://127.0.0.1:2905") {
+        Ok((s, _)) => s,
         Err(e) => {
             commands.spawn().insert(Error {
                 message: format!("Couldn't connect to server ({}).\n\nYou can try reconnecting, or try another time because the service might be down.", e),
@@ -20,10 +27,7 @@ pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbySt
         }
     };
 
-    socket
-        .set_nonblocking(true)
-        .expect("Couldn't set socket to nonblocking");
-    commands.spawn().insert(Server { socket });
+    // commands.spawn().insert(Server { socket });
     state.set(LobbyState::LobbiesList).unwrap();
 }
 
