@@ -1,11 +1,17 @@
-use crate::error::UnoError;
+use crate::{
+    card::{Card, Color},
+    error::UnoError,
+    lobby::LobbyId,
+};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::{
     iter::FromIterator,
     net::TcpStream,
     ops::{Bound, RangeBounds},
 };
 use tungstenite::{Message, WebSocket};
+use uuid::Uuid;
 
 /// Delimiter between packets
 pub const PACKET_DELIMITER: u8 = 255;
@@ -48,6 +54,49 @@ where
     ))?;
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum _Packet {
+    CreateLobby,
+    LobbyCreated(LobbyId),
+    LobbyDestroyed(LobbyId),
+    JoinLobby(LobbyId),
+    PlayerJoinedLobby {
+        lobby_id: LobbyId,
+        player_id: Uuid,
+    },
+    LeaveLobby(LobbyId),
+    PlayerLeftLobby {
+        lobby_id: LobbyId,
+        player_id: Uuid,
+    },
+    LobbyInfo {
+        lobby_id: LobbyId,
+        players: Vec<String>,
+    },
+    Username(String),
+    StartGame,
+    GameEnd,
+    PlayerScore(u32),
+    // In game commmands
+    PlayCard(Card),
+    CardPlayed(Card),
+    CardValidation(bool),
+    DrawCard(Card),
+    HandSize(u32),
+    ChooseColor,
+    ColorChosen(Color),
+    CurrentColor(Color),
+    Uno,
+    StopUno,
+    CounterUno,
+    StopCounterUno,
+    HaveToDrawCard,
+    PassTurn,
+    YourPlayerId(Uuid),
+    // Other
+    Error(String),
 }
 
 /// Command bytes

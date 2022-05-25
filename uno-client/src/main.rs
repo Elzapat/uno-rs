@@ -2,14 +2,36 @@
 #[allow(clippy::too_many_arguments)]
 mod game;
 mod menu;
+mod network;
 pub mod utils;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
+use bevy_slinet::{
+    client::{ClientPlugin, ConnectionEstablishEvent, PacketReceiveEvent},
+    packet_length_serializer::LittleEndian,
+    protocols::tcp::TcpProtocol,
+    serializers::bincode::{BincodeSerializer, DefaultOptions},
+    ClientConfig,
+};
+use serde::{Deserialize, Serialize};
 use std::net::TcpStream;
 use tungstenite::WebSocket;
 use uno::packet::{read_socket, Packet};
 use utils::drag_and_drop::*;
+
+struct NetworkConfig;
+
+impl ClientConfig for NetworkConfig {
+    type ClientPacket = NetworkPacket;
+    type ServerPacket = NetworkPacket;
+    type Protocol = TcpProtocol;
+    type Serializer = BincodeSerializer<DefaultOptions>;
+    type LengthSerializer = LittleEndian<u32>;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct NetworkPacket(Vec<u8>);
 
 // States
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -51,6 +73,7 @@ fn main() {
         .add_state(GameState::Lobbies)
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
+        .add_plugin(ClientPlugin::<NetworkConfig>::connect("127.0.0.1:2905"))
         .add_plugin(utils::cursor_state::CursorStatePlugin)
         .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
         .add_plugin(menu::MenuPlugin)

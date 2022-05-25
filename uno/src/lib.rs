@@ -1,6 +1,7 @@
 pub mod card;
 pub mod deck;
 pub mod error;
+pub mod lobby;
 pub mod packet;
 pub mod player;
 

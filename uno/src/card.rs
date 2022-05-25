@@ -1,6 +1,7 @@
 use crate::packet::Args;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Color {
     Yellow = 0,
     Red = 1,
@@ -21,7 +22,7 @@ impl From<u8> for Color {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Value {
     One = 1,
     Two = 2,
@@ -64,7 +65,7 @@ impl From<u8> for Value {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Card {
     pub color: Color,
     pub value: Value,

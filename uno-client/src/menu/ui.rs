@@ -56,6 +56,10 @@ pub fn lobby_panel(
         .collapsible(false)
         .resizable(false);
 
+    let server = server_query.get_single_mut();
+    if server.is_err() {
+        return;
+    }
     let mut server = server_query.single_mut();
 
     match lobby_state.current() {
