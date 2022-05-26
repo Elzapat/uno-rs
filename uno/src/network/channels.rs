@@ -1,0 +1,20 @@
+use naia_shared::{derive_channels, Channel, ChannelDirection, ChannelMode, ReliableSettings};
+
+#[derive_channels]
+pub enum Channels {
+    Lobby,
+    Game,
+}
+
+pub const CHANNEL_CONFIG: &[Channel<Channels>] = &[
+    Channel {
+        index: Channels::Lobby,
+        direction: ChannelDirection::Bidirectional,
+        mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+    },
+    Channel {
+        index: Channels::Game,
+        direction: ChannelDirection::Bidirectional,
+        mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+    },
+];

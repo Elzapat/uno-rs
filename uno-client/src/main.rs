@@ -2,33 +2,16 @@
 #[allow(clippy::too_many_arguments)]
 mod game;
 mod menu;
-mod network;
 pub mod utils;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use bevy_slinet::{
-    client::{ClientPlugin, ConnectionEstablishEvent, PacketReceiveEvent},
-    packet_length_serializer::LittleEndian,
-    protocols::tcp::TcpProtocol,
-    serializers::bincode::{BincodeSerializer, DefaultOptions},
-    ClientConfig,
-};
+use naia_bevy_client::{Client, ClientConfig, Plugin as ClientPlugin};
 use serde::{Deserialize, Serialize};
 use std::net::TcpStream;
 use tungstenite::WebSocket;
-use uno::packet::{read_socket, Packet};
+use uno::network::{shared_config, Channels, Protocol};
 use utils::drag_and_drop::*;
-
-struct NetworkConfig;
-
-impl ClientConfig for NetworkConfig {
-    type ClientPacket = NetworkPacket;
-    type ServerPacket = NetworkPacket;
-    type Protocol = TcpProtocol;
-    type Serializer = BincodeSerializer<DefaultOptions>;
-    type LengthSerializer = LittleEndian<u32>;
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct NetworkPacket(Vec<u8>);
@@ -73,7 +56,10 @@ fn main() {
         .add_state(GameState::Lobbies)
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
-        .add_plugin(ClientPlugin::<NetworkConfig>::connect("127.0.0.1:2905"))
+        .add_plugin(ClientPlugin::<Protocol, Channels>::new(
+            ClientConfig::default(),
+            shared_config(),
+        ))
         .add_plugin(utils::cursor_state::CursorStatePlugin)
         .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
         .add_plugin(menu::MenuPlugin)
@@ -116,6 +102,7 @@ fn animate_sprite_system(
 }
 */
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, mut client: Client<Protocol, Channels>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    client.connect("http://127.0.0.1:2905");
 }

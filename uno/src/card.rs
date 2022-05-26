@@ -1,4 +1,3 @@
-use crate::packet::Args;
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -110,17 +109,5 @@ impl From<&[u8]> for Card {
 impl Into<[u8; 2]> for Card {
     fn into(self) -> [u8; 2] {
         [self.color as u8, self.value as u8]
-    }
-}
-
-impl From<Args> for Card {
-    fn from(args: Args) -> Self {
-        Card::from((*args.get(0).unwrap(), *args.get(1).unwrap()))
-    }
-}
-
-impl From<Card> for Args {
-    fn from(card: Card) -> Self {
-        Args(vec![card.color as u8, card.value as u8])
     }
 }

@@ -2,14 +2,13 @@ pub mod card;
 pub mod deck;
 pub mod error;
 pub mod lobby;
-pub mod packet;
+pub mod network;
 pub mod player;
 
 pub mod prelude {
     pub use crate::{
         card::{self, Card},
         deck::*,
-        packet::{self, Packet},
         player::*,
     };
 }
