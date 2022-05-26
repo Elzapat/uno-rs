@@ -1,6 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 pub enum Color {
     Yellow = 0,
     Red = 1,
@@ -21,7 +19,7 @@ impl From<u8> for Color {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 pub enum Value {
     One = 1,
     Two = 2,
@@ -64,7 +62,7 @@ impl From<u8> for Value {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
 pub struct Card {
     pub color: Color,
     pub value: Value,
@@ -73,6 +71,13 @@ pub struct Card {
 impl Card {
     pub fn new(value: Value, color: Color) -> Card {
         Card { value, color }
+    }
+
+    pub fn back() -> Card {
+        Card {
+            value: Value::Back,
+            color: Color::Black,
+        }
     }
 
     pub fn can_be_played(&self, top_card: Card, current_color: Color) -> bool {

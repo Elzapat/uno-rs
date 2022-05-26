@@ -1,5 +1,4 @@
-use crate::prelude::*;
-use card::{Color, Value};
+use crate::card::{Card, Color, Value};
 use rand::Rng;
 use std::collections::VecDeque;
 

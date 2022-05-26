@@ -3,7 +3,7 @@ mod ui;
 
 use crate::GameState;
 use bevy::{ecs::schedule::ShouldRun, prelude::*};
-use uuid::Uuid;
+use uno::Lobby;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum LobbyState {
@@ -12,14 +12,8 @@ pub enum LobbyState {
     Unconnected,
 }
 
+#[derive(Deref, DerefMut)]
 pub struct LobbiesList(Vec<Lobby>);
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
-pub struct Lobby {
-    id: u8,
-    number_players: u8,
-    players: Vec<(Uuid, String)>,
-}
 
 pub struct MenuPlugin;
 
@@ -27,7 +21,6 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
             .insert_resource(Option::<Lobby>::None)
-            .add_startup_system(lobbies::connect_to_server)
             .add_state(LobbyState::Unconnected)
             .add_system_set(
                 SystemSet::new()

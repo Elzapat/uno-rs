@@ -1,4 +1,5 @@
-use crate::{card::Color, prelude::*};
+use crate::card::{Card, Color};
+use uuid::Uuid;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PlayerState {
@@ -13,8 +14,9 @@ pub enum PlayerState {
 }
 
 /// Structure to define a Uno player
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Player {
+    pub id: Uuid,
     pub hand: Vec<Card>,
     pub score: u32,
     pub username: String,
@@ -22,8 +24,9 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(username: String) -> Player {
+    pub fn new(id: Uuid, username: String) -> Player {
         Player {
+            id,
             hand: Vec::new(),
             state: PlayerState::WaitingToPlay,
             score: 0,
@@ -41,6 +44,6 @@ impl Player {
 
 impl PartialEq for Player {
     fn eq(&self, other: &Self) -> bool {
-        self.username == other.username
+        self.id == other.id
     }
 }

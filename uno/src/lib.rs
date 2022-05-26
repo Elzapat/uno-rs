@@ -5,20 +5,15 @@ pub mod lobby;
 pub mod network;
 pub mod player;
 
-pub mod prelude {
-    pub use crate::{
-        card::{self, Card},
-        deck::*,
-        player::*,
-    };
-}
+pub use card::Card;
+pub use deck::Deck;
+pub use lobby::Lobby;
+pub use player::Player;
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-
     #[test]
     fn full_deck_size() {
-        assert_eq!(Deck::full().size(), 108);
+        assert_eq!(crate::deck::Deck::full().size(), 108);
     }
 }

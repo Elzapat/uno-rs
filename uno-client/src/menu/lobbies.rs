@@ -1,35 +1,13 @@
-use super::{LobbiesList, Lobby, LobbyState};
-use crate::{game::StartGameEvent, utils::errors::Error, IncomingPackets, Server};
+use super::{LobbiesList, LobbyState};
+use crate::{game::StartGameEvent, utils::errors::Error};
 use bevy::prelude::*;
-use itertools::Itertools;
-use std::net::TcpStream;
-use uno::packet::{Command, Packet, ARG_DELIMITER};
+use naia_bevy_client::{event::MessageEvent, Client};
+use uno::Player;
+use uno::{
+    network::{Channels, Protocol},
+    Lobby,
+};
 use uuid::Uuid;
-
-pub fn connect_to_server(mut commands: Commands, mut state: ResMut<State<LobbyState>>) {
-    // let stream = match TcpStream::connect("127.0.0.1:2905") {
-    //     Ok(s) => s,
-    //     Err(e) => {
-    //         commands.spawn().insert(Error {
-    //             message: format!("Couldn't connect to server ({}).\n\nYou can try reconnecting, or try another time because the service might be down.", e),
-    //         });
-    //         return;
-    //     }
-    // };
-
-    let socket = match tungstenite::connect("ws://127.0.0.1:2905") {
-        Ok((s, _)) => s,
-        Err(e) => {
-            commands.spawn().insert(Error {
-                message: format!("Couldn't connect to server ({}).\n\nYou can try reconnecting, or try another time because the service might be down.", e),
-            });
-            return;
-        }
-    };
-
-    // commands.spawn().insert(Server { socket });
-    state.set(LobbyState::LobbiesList).unwrap();
-}
 
 pub fn execute_packets(
     mut commands: Commands,
@@ -37,119 +15,85 @@ pub fn execute_packets(
     mut lobbies: ResMut<LobbiesList>,
     mut current_lobby: ResMut<Option<Lobby>>,
     mut start_game_event: EventWriter<StartGameEvent>,
-    mut incoming_packets: ResMut<IncomingPackets>,
+    mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
 ) {
-    let packets = incoming_packets.0.drain(..).collect::<Vec<Packet>>();
-
-    for mut packet in packets {
-        info!("{:?}", packet);
-        match packet.command {
-            Command::StartGame => start_game_event.send(StartGameEvent(
+    for MessageEvent(Channels::Lobby, message) in message_events.iter() {
+        match message {
+            Protocol::StartGame(_) => start_game_event.send(StartGameEvent(
                 current_lobby.as_ref().as_ref().unwrap().players.clone(),
             )),
-            Command::JoinLobby => {
-                let players = packet
-                    .args
-                    .get_range(1..)
-                    .split(|&x| x == ARG_DELIMITER)
-                    .tuples()
-                    .map(|(id, username)| {
-                        (
-                            Uuid::from_slice(id).unwrap(),
-                            String::from_utf8(username.to_vec()).unwrap(),
-                        )
-                    })
-                    .collect::<Vec<(Uuid, String)>>();
-
+            Protocol::JoinLobby(lobby) => {
                 lobby_state.set(LobbyState::InLobby).unwrap();
 
                 *current_lobby = Some(Lobby {
-                    id: *packet.args.get(0).unwrap(),
-                    number_players: 1,
-                    players,
+                    id: *lobby.lobby_id,
+                    players: lobby
+                        .players
+                        .iter()
+                        .map(|(id, name)| {
+                            Player::new(Uuid::from_slice(id.as_bytes()).unwrap(), name.clone())
+                        })
+                        .collect(),
                 });
             }
-            Command::PlayerJoinedLobby => {
-                for lobby in lobbies.0.iter_mut() {
-                    if lobby.id == *packet.args.get(0).unwrap() {
-                        lobby.number_players += 1;
-                    }
-                }
-
+            Protocol::PlayerJoinedLobby(joined_lobby) => {
                 if let LobbyState::InLobby = lobby_state.current() {
-                    let args = packet.args.get_range(1..);
-                    let delim_pos = args.iter().position(|&b| b == ARG_DELIMITER).unwrap();
-                    let id = Uuid::from_slice(&args[..delim_pos]).unwrap();
-                    let username = String::from_utf8(args[delim_pos + 1..].to_vec()).unwrap();
-                    (*current_lobby)
-                        .as_mut()
-                        .unwrap()
-                        .players
-                        .push((id, username));
+                    current_lobby.as_mut().unwrap().players.push(Player::new(
+                        Uuid::from_slice(joined_lobby.player_id.as_bytes()).unwrap(),
+                        *joined_lobby.player_name,
+                    ));
                 }
             }
-            Command::LeaveLobby => {
+            Protocol::LeaveLobby(_) => {
                 lobby_state.set(LobbyState::LobbiesList).unwrap();
                 *current_lobby = None;
             }
-            Command::PlayerLeftLobby => {
-                for lobby in lobbies.0.iter_mut() {
-                    if lobby.id == *packet.args.get(0).unwrap() && lobby.number_players > 0 {
-                        lobby.number_players -= 1;
-                    }
-                }
-
-                if let LobbyState::InLobby = lobby_state.current() {
-                    let id = Uuid::from_slice(&packet.args.get_range(1..)).unwrap();
-                    if let Some(current_lobby) = (*current_lobby).as_mut() {
-                        current_lobby.players.retain(|p| p.0 != id);
-                    }
+            Protocol::PlayerLeftLobby(left_lobby) => {
+                for lobby in lobbies.iter_mut() {
+                    lobby.players.retain(|p| {
+                        p.id != Uuid::from_slice(left_lobby.player_id.as_bytes()).unwrap()
+                    });
                 }
             }
-            Command::LobbyCreated => {
-                let id = *packet.args.get(0).unwrap();
-                lobbies.0.push(Lobby {
-                    id,
-                    number_players: 0,
+            Protocol::LobbyCreated(lobby) => {
+                lobbies.push(Lobby {
+                    id: *lobby.lobby_id,
                     players: Vec::new(),
                 });
             }
-            Command::LobbyDestroyed => {
-                let id = *packet.args.get(0).unwrap();
-                let idx = lobbies.0.iter().position(|l| l.id == id).unwrap();
-                lobbies.0.remove(idx);
+            Protocol::LobbyDestroyed(lobby) => {
+                let idx = lobbies.0.iter().position(|l| l.id == *lobby.lobby_id);
+                if let Some(idx) = idx {
+                    lobbies.0.remove(idx);
+                }
             }
-            Command::LobbyInfo => {
-                if let LobbyState::InLobby = lobby_state.current() {
-                    if let Ok(players_raw) = String::from_utf8(packet.args.get_range(2..)) {
-                        let _players = players_raw
-                            .split(char::from_digit(ARG_DELIMITER.into(), 10).unwrap())
-                            .map(|p| p.to_owned())
-                            .collect::<Vec<String>>();
+            Protocol::LobbyInfo(lobby) => {
+                let players = lobby
+                    .players
+                    .iter()
+                    .map(|(id, name)| {
+                        Player::new(Uuid::from_slice(id.as_bytes()).unwrap(), name.clone())
+                    })
+                    .collect();
+
+                for existing_lobby in lobbies.iter_mut() {
+                    if existing_lobby.id == *lobby.lobby_id {
+                        existing_lobby.players = players;
+                        continue;
                     }
                 }
+
+                lobbies.push(Lobby {
+                    id: *lobby.lobby_id,
+                    players,
+                });
             }
-            Command::LobbiesInfo => {
-                if let LobbyState::LobbiesList = lobby_state.current() {
-                    lobbies.0 = packet
-                        .args
-                        .get_range(..)
-                        .into_iter()
-                        .tuples()
-                        .map(|(id, number_players)| Lobby {
-                            id,
-                            number_players,
-                            players: Vec::new(),
-                        })
-                        .collect::<Vec<Lobby>>();
-                }
+            Protocol::Error(error) => {
+                commands.spawn().insert(Error {
+                    message: *error.error,
+                });
             }
-            Command::Error => {
-                if let Ok(error) = String::from_utf8(packet.args.get_range(..)) {
-                    commands.spawn().insert(Error { message: error });
-                }
-            }
-            _ => incoming_packets.0.push(packet),
+            _ => {}
         };
     }
 }

@@ -2975,12 +2975,9 @@ checksum = "957e51f3646910546462e67d5f7599b9e4fb8acdd304b087a6494730f9eebf04"
 name = "uno"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bevy_ecs",
  "naia-shared",
  "rand",
- "ron",
- "serde",
  "uuid 1.1.0",
 ]
 
@@ -2992,9 +2989,7 @@ dependencies = [
  "bevy_egui",
  "itertools",
  "naia-bevy-client",
- "naia-shared",
  "serde",
- "tungstenite",
  "uno",
  "uuid 1.1.0",
  "wasm-bindgen",
@@ -3049,7 +3044,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93bbc61e655a4833cf400d0d15bf3649313422fa7572886ad6dab16d79886365"
 dependencies = [
  "getrandom",
- "serde",
 ]
 
 [[package]]

@@ -6,7 +6,7 @@ use naia_shared::{Property, Replicate};
 #[derive(Component, Replicate)]
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct CurrentColor {
-    color: Property<u8>,
+    pub color: Property<u8>,
 }
 
 impl CurrentColor {

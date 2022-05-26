@@ -5,7 +5,7 @@ use naia_shared::{Property, Replicate};
 #[derive(Component, Replicate)]
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct CardValidation {
-    valid: Property<bool>,
+    pub valid: Property<bool>,
 }
 
 impl CardValidation {

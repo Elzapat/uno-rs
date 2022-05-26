@@ -1,12 +1,12 @@
 use crate::{
     utils::constants::{CARD_HEIGHT, CARD_PADDING, CARD_WIDTH},
-    GameState, IncomingPackets,
+    GameState,
 };
 use bevy::{ecs::schedule::ShouldRun, prelude::*};
 use cards::*;
 use uno::{
-    card::Color,
-    packet::{Command, Packet},
+    card::{Card, Color},
+    Player as UnoPlayer,
 };
 use uuid::Uuid;
 
@@ -16,14 +16,8 @@ mod ui;
 pub struct GamePlugin;
 
 // Components
-#[derive(Component)]
-pub struct Player {
-    id: Uuid,
-    hand_size: usize,
-    is_playing: bool,
-    score: u32,
-    username: String,
-}
+#[derive(Component, Deref, DerefMut)]
+pub struct Player(UnoPlayer);
 #[derive(Component)]
 pub struct ThisPlayer;
 #[derive(Component)]
@@ -49,7 +43,7 @@ pub struct GameAssets {
 pub struct CurrentColor(Color);
 
 // Events
-pub struct StartGameEvent(pub Vec<(Uuid, String)>);
+pub struct StartGameEvent(pub Vec<UnoPlayer>);
 pub struct ColorChosenEvent(pub Color);
 pub struct PlayedCardValidationEvent(pub bool);
 pub struct GameEndEvent(pub Uuid);
@@ -103,13 +97,8 @@ fn start_game(
     #[allow(clippy::never_loop)]
     for StartGameEvent(clients) in start_game_event.iter() {
         for client in clients {
-            commands.spawn().insert(Player {
-                id: client.0,
-                hand_size: 7,
-                score: 0,
-                username: client.1.clone(),
-                is_playing: false,
-            });
+            client.hand = vec![Card::back(); 7];
+            commands.spawn().insert(Player(*client));
         }
 
         game_state.set(GameState::Game).unwrap();
