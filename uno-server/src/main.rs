@@ -12,7 +12,7 @@ mod server;
 fn main() {
     SimpleLogger::new().init().unwrap();
 
-    if let Err(e) = Server::run() {
+    if let Err(e) = Server::new().run() {
         error!("{}", e);
     }
 }

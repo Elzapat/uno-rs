@@ -1,21 +1,19 @@
 use crate::client::Client;
 use anyhow::Result;
 use log::{error, info};
+use naia_server::UserKey;
+use std::sync::mpsc::{Receiver, Sender};
 use uno::{
-    card::{Color, Value},
-    packet::{read_socket, write_socket, Command},
+    card::{Card, Color, Value},
+    network::{protocol, Channels, Protocol},
     player::PlayerState,
-    prelude::*,
+    Deck,
 };
 use uuid::Uuid;
 
-// enum GameState {
-//     Playing,
-//     EndLobby,
-// }
-
 pub struct Game {
-    // state: GameState,
+    packets_receiver: Receiver<(UserKey, Protocol)>,
+    packets_sender: Sender<(UserKey, Protocol)>,
     clients: Vec<Client>,
     deck: Deck,
     discard: Deck,
@@ -25,11 +23,16 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(clients: Vec<Client>) -> Game {
+    pub fn new(
+        clients: Vec<Client>,
+        sender: Sender<(UserKey, Protocol)>,
+        receiver: Receiver<(UserKey, Protocol)>,
+    ) -> Game {
         Game {
+            packets_sender: sender,
+            packets_receiver: receiver,
             deck: Deck::full(),
             discard: Deck::empty(),
-            // state: GameState::Playing,
             clients,
             turn_index: 0,
             reverse_turn: false,
@@ -53,24 +56,30 @@ impl Game {
                 return Ok(self.clients);
             }
 
-            self.pass_turn(false)?;
+            self.game_turn()?;
+        }
+    }
 
-            let mut pass_turn = false;
-            while !pass_turn {
-                if let Err(e) = self.read_sockets() {
+    fn game_turn(&mut self) -> Result<()> {
+        self.pass_turn(false)?;
+
+        let mut pass_turn = false;
+        while !pass_turn {
+            if let Err(e) = self.read_sockets() {
+                error!("{}", e);
+                continue;
+            }
+
+            match self.execute_commands() {
+                Ok(pass) => pass_turn = pass,
+                Err(e) => {
                     error!("{}", e);
                     continue;
                 }
-
-                match self.execute_commands() {
-                    Ok(pass) => pass_turn = pass,
-                    Err(e) => {
-                        error!("{}", e);
-                        continue;
-                    }
-                }
             }
         }
+
+        Ok(())
     }
 
     fn execute_commands(&mut self) -> Result<bool> {
