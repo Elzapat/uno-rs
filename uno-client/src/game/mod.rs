@@ -4,8 +4,10 @@ use crate::{
 };
 use bevy::{ecs::schedule::ShouldRun, prelude::*};
 use cards::*;
+use naia_bevy_client::events::MessageEvent;
 use uno::{
     card::{Card, Color},
+    network::{Channels, Protocol},
     Player as UnoPlayer,
 };
 use uuid::Uuid;
@@ -40,12 +42,17 @@ pub struct GameAssets {
     background: Handle<Image>,
     cards: Handle<TextureAtlas>,
 }
+#[derive(Deref, DerefMut)]
 pub struct CurrentColor(Color);
 
 // Events
+#[derive(Deref, DerefMut)]
 pub struct StartGameEvent(pub Vec<UnoPlayer>);
+#[derive(Deref, DerefMut)]
 pub struct ColorChosenEvent(pub Color);
+#[derive(Deref, DerefMut)]
 pub struct PlayedCardValidationEvent(pub bool);
+#[derive(Deref, DerefMut)]
 pub struct GameEndEvent(pub Uuid);
 
 impl Plugin for GamePlugin {
@@ -96,9 +103,10 @@ fn start_game(
 ) {
     #[allow(clippy::never_loop)]
     for StartGameEvent(clients) in start_game_event.iter() {
-        for client in clients {
+        for client in clients.iter() {
+            let mut client = client.clone();
             client.hand = vec![Card::back(); 7];
-            commands.spawn().insert(Player(*client));
+            commands.spawn().insert(Player(client));
         }
 
         game_state.set(GameState::Game).unwrap();
@@ -128,7 +136,7 @@ fn load_assets(
 
 fn execute_packets(
     mut commands: Commands,
-    mut incoming_packets: ResMut<IncomingPackets>,
+    mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
     uno_query: Query<Entity, With<CallUno>>,
     counter_uno_query: Query<Entity, With<CallCounterUno>>,
     mut players_query: Query<(Entity, &mut Player)>,
@@ -138,28 +146,33 @@ fn execute_packets(
     mut game_end_event: EventWriter<GameEndEvent>,
     mut current_color: ResMut<CurrentColor>,
 ) {
-    let packets = incoming_packets.0.drain(..).collect::<Vec<Packet>>();
+    for MessageEvent(channel, message) in message_events.iter() {
+        if *channel != Channels::Game {
+            return;
+        }
 
-    for mut packet in packets {
-        info!("{:?}", packet);
-        match packet.command {
-            Command::GameEnd => game_end_event.send(GameEndEvent(
-                Uuid::from_slice(&packet.args.get_range(..)).unwrap(),
+        match message {
+            Protocol::GameEnd(winner) => game_end_event.send(GameEndEvent(
+                Uuid::from_slice(winner.winner_id.as_bytes()).unwrap(),
             )),
-            Command::DrawCard => draw_card_event.send(DrawCardEvent(packet.args.into())),
-            Command::CardPlayed => card_played_event.send(CardPlayedEvent(packet.args.into())),
-            Command::CardValidation => {
-                played_card_validation_event
-                    .send(PlayedCardValidationEvent(*packet.args.get(0).unwrap() != 0));
+            Protocol::DrawCard(card) => {
+                draw_card_event.send(DrawCardEvent((*card.color, *card.value).into()))
             }
-            Command::PassTurn => {
-                let uuid = Uuid::from_slice(&packet.args.get_range(..)).unwrap();
+            Protocol::CardPlayed(card) => {
+                card_played_event.send(CardPlayedEvent((*card.color, *card.value).into()))
+            }
+            Protocol::CardValidation(validation) => {
+                played_card_validation_event.send(PlayedCardValidationEvent(*validation.valid));
+            }
+            Protocol::PassTurn(playing_player) => {
+                let uuid = Uuid::from_slice(playing_player.playing_id.as_bytes()).unwrap();
+
                 for (_, mut player) in players_query.iter_mut() {
                     player.is_playing = player.id == uuid;
                 }
             }
-            Command::YourPlayerId => {
-                let uuid = Uuid::from_slice(&packet.args.get_range(..)).unwrap();
+            Protocol::YourPlayerId(id) => {
+                let uuid = Uuid::from_slice(id.player_id.as_bytes()).unwrap();
                 for (entity, player) in players_query.iter() {
                     if player.id == uuid {
                         commands.entity(entity).insert(ThisPlayer);
@@ -167,52 +180,47 @@ fn execute_packets(
                     }
                 }
             }
-            Command::HandSize => {
-                let nb_cards = *packet.args.get(0).unwrap();
-                let uuid = Uuid::from_slice(&packet.args.get_range(1..)).unwrap();
+            Protocol::HandSize(hand) => {
+                let uuid = Uuid::from_slice(hand.player_id.as_bytes()).unwrap();
 
                 for (_, mut player) in players_query.iter_mut() {
                     if player.id == uuid {
-                        player.hand_size = nb_cards as usize;
+                        player.hand = vec![Card::back(); *hand.size as usize];
                         break;
                     }
                 }
             }
-            Command::HaveToDrawCard => {
+            Protocol::HaveToDrawCard(_) => {
                 commands.spawn().insert(DrawCard);
             }
-            Command::Uno => {
+            Protocol::Uno(_) => {
                 commands.spawn().insert(CallUno);
             }
-            Command::StopUno => {
+            Protocol::StopUno(_) => {
                 for entity in uno_query.iter() {
                     commands.entity(entity).despawn();
                 }
             }
-            Command::CounterUno => {
+            Protocol::CounterUno(_) => {
                 commands.spawn().insert(CallCounterUno);
             }
-            Command::StopCounterUno => {
+            Protocol::StopCounterUno(_) => {
                 for entity in counter_uno_query.iter() {
                     commands.entity(entity).despawn();
                 }
             }
-            Command::PlayerScore => {
-                let uuid = Uuid::from_slice(&packet.args.get_range(..16)).unwrap();
-                let score = String::from_utf8(packet.args.get_range(..))
-                    .unwrap()
-                    .parse::<u32>()
-                    .unwrap();
+            Protocol::PlayerScore(score) => {
+                let uuid = Uuid::from_slice(score.player_id.as_bytes()).unwrap();
 
                 for (_, mut player) in players_query.iter_mut() {
                     if player.id == uuid {
-                        player.score = score;
+                        player.score = *score.score;
                         break;
                     }
                 }
             }
-            Command::CurrentColor => current_color.0 = (*packet.args.get(0).unwrap()).into(),
-            _ => incoming_packets.0.push(packet),
+            Protocol::CurrentColor(color) => **current_color = (*color.color).into(),
+            _ => {}
         }
     }
 }

@@ -7,13 +7,14 @@ use crate::{
         BASE_CARD_Z, CARD_ANIMATION_TIME_S, CARD_DROP_ZONE, CARD_HEIGHT, CARD_SCALE, CARD_WIDTH,
         DECK_POS, DISCARD_POS, DISCARD_Z_INCREASE, Z_INCREASE,
     },
-    Draggable, Dragged, Dropped, GameState, Server, SpriteSize,
+    Draggable, Dragged, Dropped, GameState, SpriteSize,
 };
 use bevy::{prelude::*, window::WindowResized};
+use naia_bevy_client::Client;
 use std::time::Duration;
 use uno::{
     card::{Card, Color, Value},
-    packet::{write_socket, Command},
+    network::{protocol, Channels, Protocol},
 };
 
 // Ressources
@@ -271,13 +272,11 @@ fn card_dropped(
 }
 
 fn play_card(
-    mut server_query: Query<&mut Server>,
     mut play_card_event: EventReader<PlayCardEvent>,
+    mut client: Client<Protocol, Channels>,
 ) {
     for PlayCardEvent(card) in play_card_event.iter() {
-        let mut server = server_query.single_mut();
-
-        write_socket(&mut server.socket, Command::PlayCard, *card).unwrap();
+        client.send_message(Channels::Game, &protocol::PlayCard::new(*card));
     }
 }
 
@@ -322,12 +321,11 @@ fn remove_animation_on_drag(
 }
 
 pub fn color_chosen(
-    mut server_query: Query<&mut Server>,
+    mut client: Client<Protocol, Channels>,
     mut color_chosen_event: EventReader<ColorChosenEvent>,
 ) {
     for ColorChosenEvent(color) in color_chosen_event.iter() {
-        let mut server = server_query.single_mut();
-        write_socket(&mut server.socket, Command::ColorChosen, *color as u8).unwrap();
+        client.send_message(Channels::Game, &protocol::ColorChosen::new(*color));
     }
 }
 

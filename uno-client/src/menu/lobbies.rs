@@ -1,7 +1,7 @@
 use super::{LobbiesList, LobbyState};
 use crate::{game::StartGameEvent, utils::errors::Error};
 use bevy::prelude::*;
-use naia_bevy_client::{event::MessageEvent, Client};
+use naia_bevy_client::events::MessageEvent;
 use uno::Player;
 use uno::{
     network::{Channels, Protocol},
@@ -17,7 +17,11 @@ pub fn execute_packets(
     mut start_game_event: EventWriter<StartGameEvent>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
 ) {
-    for MessageEvent(Channels::Lobby, message) in message_events.iter() {
+    for MessageEvent(channel, message) in message_events.iter() {
+        if *channel != Channels::Lobby {
+            return;
+        }
+
         match message {
             Protocol::StartGame(_) => start_game_event.send(StartGameEvent(
                 current_lobby.as_ref().as_ref().unwrap().players.clone(),
@@ -38,9 +42,9 @@ pub fn execute_packets(
             }
             Protocol::PlayerJoinedLobby(joined_lobby) => {
                 if let LobbyState::InLobby = lobby_state.current() {
-                    current_lobby.as_mut().unwrap().players.push(Player::new(
+                    (*current_lobby).as_mut().unwrap().players.push(Player::new(
                         Uuid::from_slice(joined_lobby.player_id.as_bytes()).unwrap(),
-                        *joined_lobby.player_name,
+                        (*joined_lobby.player_name).clone(),
                     ));
                 }
             }
@@ -79,7 +83,7 @@ pub fn execute_packets(
                 for existing_lobby in lobbies.iter_mut() {
                     if existing_lobby.id == *lobby.lobby_id {
                         existing_lobby.players = players;
-                        continue;
+                        return;
                     }
                 }
 
@@ -90,7 +94,7 @@ pub fn execute_packets(
             }
             Protocol::Error(error) => {
                 commands.spawn().insert(Error {
-                    message: *error.error,
+                    message: (*error.error).clone(),
                 });
             }
             _ => {}

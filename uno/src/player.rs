@@ -21,6 +21,7 @@ pub struct Player {
     pub score: u32,
     pub username: String,
     pub state: PlayerState,
+    pub is_playing: bool,
 }
 
 impl Player {
@@ -31,6 +32,7 @@ impl Player {
             state: PlayerState::WaitingToPlay,
             score: 0,
             username,
+            is_playing: false,
         }
     }
 

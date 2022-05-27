@@ -2,16 +2,17 @@ use super::{
     run_if_in_end_game_lobby, run_if_in_game, CallCounterUno, CallUno, ChooseColor,
     ColorChosenEvent, CurrentColor, DrawCard, Player, ThisPlayer, Winner,
 };
-use crate::{
-    utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS},
-    Server,
-};
+use crate::utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use itertools::Itertools;
+use naia_bevy_client::Client;
 use uno::{
-    card::Color,
-    packet::{write_socket, Command},
+    card::{Card, Color},
+    network::{
+        protocol::{self, Protocol},
+        Channels,
+    },
 };
 
 pub struct GameUiPlugin;
@@ -181,7 +182,7 @@ fn choose_color_window(
 fn call_uno_window(
     mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
-    mut server_query: Query<&mut Server>,
+    mut client: Client<Protocol, Channels>,
     call_uno: Query<Entity, With<CallUno>>,
     call_counter_uno: Query<Entity, With<CallCounterUno>>,
 ) {
@@ -192,8 +193,7 @@ fn call_uno_window(
             egui::Align2::RIGHT_BOTTOM,
             egui::Vec2::new(-50.0, -50.0),
             || {
-                let mut server = server_query.single_mut();
-                write_socket(&mut server.socket, Command::Uno, vec![]).unwrap();
+                client.send_message(Channels::Game, &protocol::Uno::new());
                 commands.entity(entity).despawn();
             },
         );
@@ -204,8 +204,7 @@ fn call_uno_window(
             egui::Align2::RIGHT_BOTTOM,
             egui::Vec2::new(-50.0, -50.0),
             || {
-                let mut server = server_query.single_mut();
-                write_socket(&mut server.socket, Command::CounterUno, vec![]).unwrap();
+                client.send_message(Channels::Game, &protocol::CounterUno::new());
                 commands.entity(entity).despawn();
             },
         );
@@ -216,7 +215,7 @@ fn draw_card_window(
     mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
     draw_card_query: Query<Entity, With<DrawCard>>,
-    mut server_query: Query<&mut Server>,
+    mut client: Client<Protocol, Channels>,
 ) {
     if let Ok(entity) = draw_card_query.get_single() {
         button_window(
@@ -225,8 +224,7 @@ fn draw_card_window(
             egui::Align2::LEFT_BOTTOM,
             egui::Vec2::new(50.0, -50.0),
             || {
-                let mut server = server_query.single_mut();
-                write_socket(&mut server.socket, Command::DrawCard, vec![]).unwrap();
+                client.send_message(Channels::Game, &protocol::DrawCard::new(Card::back()));
                 commands.entity(entity).despawn();
             },
         );
@@ -263,7 +261,7 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
     const CARD_PADDING: f32 = 2.0;
 
     let size = egui::Vec2::new(
-        (CARD_WIDTH + CARD_PADDING) * player.hand_size as f32 - CARD_PADDING,
+        (CARD_WIDTH + CARD_PADDING) * player.hand.len() as f32 - CARD_PADDING,
         CARD_HEIGHT,
     );
     let (mut rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
@@ -284,7 +282,7 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
         egui::Color32::from_gray(200)
     };
 
-    for _ in 0..player.hand_size {
+    for _ in 0..player.hand.len() {
         ui.painter().rect_filled(rect, 2.0, card_color);
         rect.set_center(rect.center() + egui::Vec2::new(CARD_WIDTH + CARD_PADDING, 0.0));
     }

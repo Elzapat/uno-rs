@@ -1,13 +1,14 @@
-use super::{lobbies::connect_to_server, LobbiesList, Lobby, LobbyState};
-use crate::{utils::errors::Error, Server, Settings};
+use super::{LobbiesList, Lobby, LobbyState};
+use crate::{utils::errors::Error, Settings};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
-use uno::packet::{write_socket, Command};
+use naia_bevy_client::Client;
+use uno::network::{protocol, Channels, Protocol};
 
 pub fn settings_panel(
     mut commands: Commands,
     mut settings: ResMut<Settings>,
-    mut server_query: Query<&mut Server>,
+    mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx_mut(), |ui| {
@@ -28,12 +29,10 @@ pub fn settings_panel(
                         message: "Your username cannot contain the character ÿ or þ.".to_owned(),
                     });
                 } else {
-                    write_socket(
-                        &mut server_query.single_mut().socket,
-                        Command::Username,
-                        settings.username.as_bytes(),
-                    )
-                    .unwrap();
+                    client.send_message(
+                        Channels::Lobby,
+                        &protocol::Username::new(settings.username.clone()),
+                    );
                 }
             }
 
@@ -44,7 +43,7 @@ pub fn settings_panel(
 
 pub fn lobby_panel(
     mut commands: Commands,
-    mut server_query: Query<&mut Server>,
+    mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
@@ -55,12 +54,6 @@ pub fn lobby_panel(
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false);
-
-    let server = server_query.get_single_mut();
-    if server.is_err() {
-        return;
-    }
-    let mut server = server_query.single_mut();
 
     match lobby_state.current() {
         LobbyState::LobbiesList => window.show(egui_context.ctx_mut(), |ui| {
@@ -79,7 +72,7 @@ pub fn lobby_panel(
                                 ui.heading(format!("Lobby #{}", lobby.id));
                                 ui.separator();
                                 ui.horizontal(|ui| {
-                                    ui.label(format!("{}/10", lobby.number_players));
+                                    ui.label(format!("{}/10", lobby.players.len()));
                                     if ui.button("Join Lobby").clicked() {
                                         if settings.username.trim().is_empty() {
                                             commands.spawn().insert(Error {
@@ -88,12 +81,10 @@ pub fn lobby_panel(
                                                         .to_owned(),
                                             });
                                         } else {
-                                            write_socket(
-                                                &mut server.socket,
-                                                Command::JoinLobby,
-                                                lobby.id,
-                                            )
-                                            .unwrap();
+                                            client.send_message(
+                                                Channels::Lobby,
+                                                &protocol::JoinLobby::new(lobby.id, Vec::new()),
+                                            );
                                         }
                                     }
                                 });
@@ -106,7 +97,7 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Create lobby").clicked() {
-                    write_socket(&mut server.socket, Command::CreateLobby, vec![]).unwrap();
+                    client.send_message(Channels::Lobby, &protocol::CreateLobby::new());
                 }
             });
         }),
@@ -123,7 +114,7 @@ pub fn lobby_panel(
             ui.separator();
             for player in &lobby.players {
                 ui.label(
-                    egui::RichText::new(format!("➡ {}", player.1))
+                    egui::RichText::new(format!("➡ {}", player.username))
                         .monospace()
                         .heading(),
                 );
@@ -132,11 +123,11 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
-                    write_socket(&mut server.socket, Command::LeaveLobby, lobby.id).unwrap();
+                    client.send_message(Channels::Lobby, &protocol::LeaveLobby::new(lobby.id));
                 }
 
                 if ui.button("Start game").clicked() {
-                    write_socket(&mut server.socket, Command::StartGame, 0).unwrap();
+                    client.send_message(Channels::Lobby, &protocol::StartGame::new());
                 }
             });
         }),
@@ -160,7 +151,7 @@ pub fn unconnected_panel(
                 ui.heading("You're not connected to the server");
                 ui.add_space(10.0);
                 if ui.button("Reconnect").clicked() {
-                    connect_to_server(commands, lobby_state);
+                    // connect_to_server(commands, lobby_state);
                 }
             });
         });
