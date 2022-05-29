@@ -4,6 +4,7 @@ use naia_shared::{derive_channels, Channel, ChannelDirection, ChannelMode, Relia
 pub enum Channels {
     Lobby,
     Game,
+    Uno,
 }
 
 pub const CHANNEL_CONFIG: &[Channel<Channels>] = &[
@@ -14,6 +15,11 @@ pub const CHANNEL_CONFIG: &[Channel<Channels>] = &[
     },
     Channel {
         index: Channels::Game,
+        direction: ChannelDirection::Bidirectional,
+        mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+    },
+    Channel {
+        index: Channels::Uno,
         direction: ChannelDirection::Bidirectional,
         mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
     },

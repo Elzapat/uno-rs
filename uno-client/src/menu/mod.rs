@@ -1,13 +1,13 @@
-mod lobbies;
+pub mod lobbies;
 mod ui;
 
 use crate::GameState;
 use bevy::{ecs::schedule::ShouldRun, prelude::*};
-use uno::Lobby;
+use uno::lobby::{Lobby, LobbyId};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum LobbyState {
-    InLobby,
+    InLobby(LobbyId),
     LobbiesList,
     Unconnected,
 }
@@ -21,7 +21,7 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LobbiesList(vec![]))
             .insert_resource(Option::<Lobby>::None)
-            .add_state(LobbyState::Unconnected)
+            .add_state(LobbyState::LobbiesList)
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_connected)

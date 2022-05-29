@@ -1,8 +1,5 @@
-use crate::client::Client;
-use anyhow::Result;
-use log::{error, info};
+use crate::{client::Client, server::NaiaServer};
 use naia_server::UserKey;
-use std::sync::mpsc::{Receiver, Sender};
 use uno::{
     card::{Card, Color, Value},
     network::{protocol, Channels, Protocol},
@@ -12,9 +9,7 @@ use uno::{
 use uuid::Uuid;
 
 pub struct Game {
-    packets_receiver: Receiver<(UserKey, Protocol)>,
-    packets_sender: Sender<(UserKey, Protocol)>,
-    clients: Vec<Client>,
+    pub clients: Vec<Client>,
     deck: Deck,
     discard: Deck,
     turn_index: usize,
@@ -23,29 +18,35 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(
-        clients: Vec<Client>,
-        sender: Sender<(UserKey, Protocol)>,
-        receiver: Receiver<(UserKey, Protocol)>,
-    ) -> Game {
-        Game {
-            packets_sender: sender,
-            packets_receiver: receiver,
+    pub fn new(clients: Vec<Client>, server: &mut NaiaServer) -> Game {
+        log::info!(
+            "{:?}",
+            clients
+                .iter()
+                .map(|c| c.player.clone())
+                .collect::<Vec<uno::Player>>()
+        );
+
+        let mut game = Game {
             deck: Deck::full(),
             discard: Deck::empty(),
             clients,
             turn_index: 0,
             reverse_turn: false,
             current_color: Color::Black,
-        }
+        };
+
+        game.send_player_ids(server);
+        game.deck.shuffle();
+        game.give_first_cards(server);
+        game.draw_first_card(server);
+        game.pass_turn(server, false);
+
+        game
     }
 
+    /*
     pub fn run(mut self) -> Result<Vec<Client>> {
-        self.send_player_ids()?;
-        self.deck.shuffle();
-        self.give_first_cards()?;
-        self.draw_first_card()?;
-
         loop {
             if self.clients.is_empty() {
                 return Ok(self.clients);
@@ -59,7 +60,9 @@ impl Game {
             self.game_turn()?;
         }
     }
+    */
 
+    /*
     fn game_turn(&mut self) -> Result<()> {
         self.pass_turn(false)?;
 
@@ -81,57 +84,71 @@ impl Game {
 
         Ok(())
     }
+    */
 
-    fn execute_commands(&mut self) -> Result<bool> {
+    pub fn execute_commands(
+        &mut self,
+        server: &mut NaiaServer,
+        user_key: UserKey,
+        protocol: Protocol,
+    ) -> bool {
         let mut card_played = None;
         let mut wild_four_played = false;
         let mut stop_uno = false;
         let mut stop_counter_uno = false;
         let mut draw_card = false;
 
-        for client in self.clients.iter_mut() {
-            for packet in client.incoming_packets.drain(..) {
-                match packet.command {
-                    Command::PlayCard => {
-                        if client.player.state == PlayerState::PlayingCard {
-                            let card: Card = packet.args.as_slice().into();
-                            let valid = card
-                                .can_be_played(*self.discard.top().unwrap(), self.current_color);
+        log::info!("executing game command on user_key");
 
-                            write_socket(&mut client.socket, Command::CardValidation, valid as u8)?;
+        if let Some(client) = self.clients.iter_mut().find(|c| c.user_key == user_key) {
+            match protocol {
+                Protocol::PlayCard(card) => {
+                    log::info!("RECEIVINg PLAY CARD PACKET");
+                    if client.player.state == PlayerState::PlayingCard {
+                        let card: Card = (*card.color, *card.value).into();
+                        let valid =
+                            card.can_be_played(*self.discard.top().unwrap(), self.current_color);
 
-                            if valid {
-                                card_played = Some(card);
-                            }
-                        } else {
-                            write_socket(&mut client.socket, Command::CardValidation, 0)?;
-                        }
-                    }
-                    Command::ColorChosen => {
-                        if client.player.state == PlayerState::ChoosingColorWild
-                            || client.player.state == PlayerState::ChoosingColorWildFour
-                            || client.player.state == PlayerState::ChoosingColorWildUno
-                            || client.player.state == PlayerState::ChoosingColorWildFourUno
-                        {
-                            let color: Color = (*packet.args.get(0).unwrap()).into();
-                            self.current_color = color;
+                        server.send_message(
+                            &user_key,
+                            Channels::Uno,
+                            &protocol::CardValidation::new(valid),
+                        );
 
-                            if client.player.state == PlayerState::ChoosingColorWildFour {
-                                wild_four_played = true;
-                            } else {
-                                return Ok(true);
-                            }
+                        if valid {
+                            card_played = Some(card);
                         }
+                    } else {
+                        server.send_message(
+                            &user_key,
+                            Channels::Uno,
+                            &protocol::CardValidation::new(false),
+                        );
                     }
-                    Command::DrawCard => {
-                        if client.player.state == PlayerState::DrawingCard {
-                            draw_card = true;
-                        }
-                    }
-                    Command::Uno => stop_uno = true,
-                    Command::CounterUno => stop_counter_uno = true,
-                    _ => return Ok(false),
                 }
+                Protocol::ColorChosen(color) => {
+                    if client.player.state == PlayerState::ChoosingColorWild
+                        || client.player.state == PlayerState::ChoosingColorWildFour
+                        || client.player.state == PlayerState::ChoosingColorWildUno
+                        || client.player.state == PlayerState::ChoosingColorWildFourUno
+                    {
+                        self.current_color = (*color.color).into();
+
+                        if client.player.state == PlayerState::ChoosingColorWildFour {
+                            wild_four_played = true;
+                        } else {
+                            return true;
+                        }
+                    }
+                }
+                Protocol::DrawCard(_) => {
+                    if client.player.state == PlayerState::DrawingCard {
+                        draw_card = true;
+                    }
+                }
+                Protocol::Uno(_) => stop_uno = true,
+                Protocol::CounterUno(_) => stop_counter_uno = true,
+                _ => return false,
             }
         }
 
@@ -144,7 +161,7 @@ impl Game {
             {
                 card_idx
             } else {
-                return Ok(false);
+                return false;
             };
 
             self.clients[self.turn_index].player.hand.remove(card_idx);
@@ -167,12 +184,20 @@ impl Game {
             }
             for client in self.clients.iter_mut() {
                 if client.player.state == PlayerState::WaitingToPlay {
-                    write_socket(&mut client.socket, Command::CardPlayed, card)?;
+                    server.send_message(
+                        &client.user_key,
+                        Channels::Uno,
+                        &protocol::CardPlayed::new(card),
+                    );
                     if in_uno {
-                        write_socket(&mut client.socket, Command::CounterUno, vec![])?;
+                        server.send_message(
+                            &client.user_key,
+                            Channels::Uno,
+                            &protocol::CounterUno::new(),
+                        );
                     }
                 } else if in_uno {
-                    write_socket(&mut client.socket, Command::Uno, vec![])?;
+                    server.send_message(&client.user_key, Channels::Uno, &protocol::Uno::new());
                 }
             }
 
@@ -181,27 +206,27 @@ impl Game {
                     self.reverse_turn = !self.reverse_turn;
 
                     if self.clients.len() == 2 {
-                        self.pass_turn(true)?;
+                        self.pass_turn(server, true);
                     }
 
                     true
                 }
                 Value::DrawTwo => {
-                    self.pass_turn(true)?;
+                    self.pass_turn(server, true);
                     for _ in 0..2 {
                         let card = self.draw_card();
                         self.clients[self.turn_index].player.hand.push(card);
-                        write_socket(
-                            &mut self.clients[self.turn_index].socket,
-                            Command::DrawCard,
-                            card,
-                        )?;
+                        server.send_message(
+                            &self.clients[self.turn_index].user_key,
+                            Channels::Uno,
+                            &protocol::DrawCard::new(card),
+                        );
                     }
 
                     true
                 }
                 Value::Skip => {
-                    self.pass_turn(true)?;
+                    self.pass_turn(server, true);
                     true
                 }
                 Value::Wild => {
@@ -211,6 +236,7 @@ impl Game {
                         } else {
                             PlayerState::ChoosingColorWild
                         };
+
                     false
                 }
                 Value::WildFour => {
@@ -220,76 +246,85 @@ impl Game {
                         } else {
                             PlayerState::ChoosingColorWildFour
                         };
+
                     false
                 }
                 _ => true,
             };
 
-            return Ok(if in_uno { false } else { pass_turn });
+            return if in_uno { false } else { pass_turn };
         } else if wild_four_played {
-            self.pass_turn(true)?;
+            self.pass_turn(server, true);
 
             for _ in 0..4 {
                 let card = self.draw_card();
                 self.clients[self.turn_index].player.hand.push(card);
-                write_socket(
-                    &mut self.clients[self.turn_index].socket,
-                    Command::DrawCard,
-                    card,
-                )?;
+                server.send_message(
+                    &self.clients[self.turn_index].user_key,
+                    Channels::Uno,
+                    &protocol::DrawCard::new(card),
+                );
             }
 
-            return Ok(true);
+            return true;
         } else if stop_uno {
             for client in self.clients.iter_mut() {
-                write_socket(&mut client.socket, Command::StopUno, vec![])?;
-                write_socket(&mut client.socket, Command::StopCounterUno, vec![])?;
+                server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
+                server.send_message(
+                    &client.user_key,
+                    Channels::Uno,
+                    &protocol::StopCounterUno::new(),
+                );
             }
 
-            return Ok(true);
+            return true;
         } else if stop_counter_uno {
             for client in self.clients.iter_mut() {
-                write_socket(&mut client.socket, Command::StopUno, vec![])?;
-                write_socket(&mut client.socket, Command::StopCounterUno, vec![])?;
+                server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
+                server.send_message(
+                    &client.user_key,
+                    Channels::Uno,
+                    &protocol::StopCounterUno::new(),
+                );
             }
 
             for _ in 0..2 {
                 let card = self.draw_card();
                 self.clients[self.turn_index].player.hand.push(card);
-                write_socket(
-                    &mut self.clients[self.turn_index].socket,
-                    Command::DrawCard,
-                    card,
-                )?;
+                server.send_message(
+                    &self.clients[self.turn_index].user_key,
+                    Channels::Uno,
+                    &protocol::DrawCard::new(card),
+                );
             }
 
-            return Ok(true);
+            return true;
         } else if draw_card {
             let card = self.draw_card();
             self.clients[self.turn_index].player.hand.push(card);
 
-            write_socket(
-                &mut self.clients[self.turn_index].socket,
-                Command::DrawCard,
-                card,
-            )?;
+            server.send_message(
+                &self.clients[self.turn_index].user_key,
+                Channels::Uno,
+                &protocol::DrawCard::new(card),
+            );
 
             if self.clients[self.turn_index]
                 .player
                 .can_play(*self.discard.top().unwrap(), self.current_color)
             {
                 self.clients[self.turn_index].player.state = PlayerState::PlayingCard;
-                return Ok(false);
+                return false;
             } else {
                 self.clients[self.turn_index].player.state = PlayerState::WaitingToPlay;
-                return Ok(true);
+                return true;
             }
         }
 
-        Ok(false)
+        false
     }
 
-    fn pass_turn(&mut self, passing_turn: bool) -> Result<()> {
+    pub fn pass_turn(&mut self, server: &mut NaiaServer, passing_turn: bool) {
         if self.reverse_turn {
             if self.turn_index == 0 {
                 self.turn_index = self.clients.len() - 1;
@@ -305,17 +340,21 @@ impl Game {
         for client in self.clients.iter_mut() {
             client.player.state = PlayerState::WaitingToPlay;
 
-            write_socket(&mut client.socket, Command::PassTurn, &id.as_bytes()[..])?;
-            write_socket(
-                &mut client.socket,
-                Command::HandSize,
-                [&[nb_cards as u8], &id.as_bytes()[..]].concat(),
-            )?;
-            write_socket(
-                &mut client.socket,
-                Command::CurrentColor,
-                self.current_color as u8,
-            )?;
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::PassTurn::new(id),
+            );
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::HandSize::new(nb_cards, id),
+            );
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::CurrentColor::new(self.current_color),
+            );
         }
 
         if !passing_turn {
@@ -325,15 +364,18 @@ impl Game {
                 .can_play(*self.discard.top().unwrap(), self.current_color)
             {
                 playing_client.player.state = PlayerState::DrawingCard;
-                write_socket(&mut playing_client.socket, Command::HaveToDrawCard, vec![])?;
+                server.send_message(
+                    &playing_client.user_key,
+                    Channels::Uno,
+                    &protocol::HaveToDrawCard::new(),
+                );
             } else {
                 playing_client.player.state = PlayerState::PlayingCard;
             }
         }
-
-        Ok(())
     }
 
+    /*
     fn read_sockets(&mut self) -> Result<()> {
         let mut to_remove = None;
 
@@ -366,20 +408,20 @@ impl Game {
 
         Ok(())
     }
+    */
 
-    fn send_player_ids(&mut self) -> Result<()> {
+    fn send_player_ids(&mut self, server: &mut NaiaServer) {
+        log::info!("SENDING PLAYER IDS");
         for client in self.clients.iter_mut() {
-            write_socket(
-                &mut client.socket,
-                Command::YourPlayerId,
-                &client.id.as_bytes()[..],
-            )?;
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::YourPlayerId::new(client.id),
+            );
         }
-
-        Ok(())
     }
 
-    fn draw_first_card(&mut self) -> Result<()> {
+    fn draw_first_card(&mut self, server: &mut NaiaServer) {
         let mut first_card = self.draw_card();
         while first_card.color == Color::Black
             || first_card.value == Value::Skip
@@ -393,24 +435,29 @@ impl Game {
         self.current_color = first_card.color;
 
         for client in self.clients.iter_mut() {
-            write_socket(&mut client.socket, Command::CardPlayed, first_card)?;
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::CardPlayed::new(first_card),
+            );
         }
-
-        Ok(())
     }
 
-    fn give_first_cards(&mut self) -> Result<()> {
+    fn give_first_cards(&mut self, server: &mut NaiaServer) {
         // Deal the initial seven cards to the players
+        log::info!("GIVING FIRST CARDS");
         const INITIAL_CARDS: usize = 7;
         for client in self.clients.iter_mut() {
             for _ in 0..INITIAL_CARDS {
                 let card = self.deck.draw().unwrap();
                 client.player.hand.push(card);
-                write_socket(&mut client.socket, Command::DrawCard, card)?;
+                server.send_message(
+                    &client.user_key,
+                    Channels::Uno,
+                    &protocol::DrawCard::new(card),
+                );
             }
         }
-
-        Ok(())
     }
 
     fn draw_card(&mut self) -> Card {
@@ -426,7 +473,7 @@ impl Game {
         self.deck.draw().unwrap()
     }
 
-    fn check_if_game_end(&self) -> Option<Uuid> {
+    pub fn check_if_game_end(&self) -> Option<Uuid> {
         for client in self.clients.iter() {
             if client.player.hand.is_empty() {
                 return Some(client.id);
@@ -436,21 +483,19 @@ impl Game {
         None
     }
 
-    fn game_end(&mut self, winner_uuid: Uuid) -> Result<()> {
-        self.compute_scores()?;
+    pub fn game_end(&mut self, server: &mut NaiaServer, winner_uuid: Uuid) {
+        self.compute_scores(server);
 
         for client in self.clients.iter_mut() {
-            write_socket(
-                &mut client.socket,
-                Command::GameEnd,
-                &winner_uuid.as_bytes()[..],
-            )?;
+            server.send_message(
+                &client.user_key,
+                Channels::Uno,
+                &protocol::GameEnd::new(winner_uuid),
+            );
         }
-
-        Ok(())
     }
 
-    fn compute_scores(&mut self) -> Result<()> {
+    fn compute_scores(&mut self, server: &mut NaiaServer) {
         let mut player_scores = vec![];
 
         for client in self.clients.iter_mut() {
@@ -466,14 +511,14 @@ impl Game {
             player_scores.push((client.id, client.player.score));
         }
 
-        for (client, (uuid, score)) in self.clients.iter_mut().zip(player_scores.iter()) {
-            write_socket(
-                &mut client.socket,
-                Command::PlayerScore,
-                [&uuid.as_bytes()[..], score.to_string().as_bytes()].concat(),
-            )?;
+        for client in self.clients.iter() {
+            for (uuid, score) in player_scores.iter() {
+                server.send_message(
+                    &client.user_key,
+                    Channels::Uno,
+                    &protocol::PlayerScore::new(*score, *uuid),
+                );
+            }
         }
-
-        Ok(())
     }
 }

@@ -32,7 +32,8 @@ impl Plugin for GameUiPlugin {
                 .with_system(call_uno_window)
                 .with_system(draw_card_window),
         )
-        .add_system_set(
+        .add_system_set_to_stage(
+            CoreStage::PostUpdate,
             SystemSet::new()
                 .with_run_criteria(run_if_in_end_game_lobby)
                 .with_system(end_game_lobby),

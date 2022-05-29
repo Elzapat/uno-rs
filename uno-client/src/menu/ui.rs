@@ -48,7 +48,6 @@ pub fn lobby_panel(
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
-    current_lobby: Res<Option<Lobby>>,
 ) {
     let window = egui::Window::new("Uno")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -66,7 +65,7 @@ pub fn lobby_panel(
                 .max_height(400.0)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
-                        for lobby in &lobbies.0 {
+                        for lobby in lobbies.iter() {
                             ui.add_space(10.0);
                             ui.group(|ui| {
                                 ui.heading(format!("Lobby #{}", lobby.id));
@@ -101,18 +100,25 @@ pub fn lobby_panel(
                 }
             });
         }),
-        LobbyState::InLobby => window.show(egui_context.ctx_mut(), |ui| {
-            let lobby = match (*current_lobby).as_ref() {
-                Some(l) => l,
-                None => return,
-            };
+        LobbyState::InLobby(lobby_id) => window.show(egui_context.ctx_mut(), |ui| {
+            let mut current_lobby = None;
+            for lobby in lobbies.iter() {
+                if lobby.id == *lobby_id {
+                    current_lobby = Some(lobby);
+                    break;
+                }
+            }
+            if current_lobby.is_none() {
+                return;
+            }
+            let current_lobby = current_lobby.unwrap();
 
             ui.vertical_centered(|ui| {
-                ui.heading(format!("Lobby #{}", lobby.id));
+                ui.heading(format!("Lobby #{}", current_lobby.id));
             });
 
             ui.separator();
-            for player in &lobby.players {
+            for player in &current_lobby.players {
                 ui.label(
                     egui::RichText::new(format!("➡ {}", player.username))
                         .monospace()
@@ -123,7 +129,10 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
-                    client.send_message(Channels::Lobby, &protocol::LeaveLobby::new(lobby.id));
+                    client.send_message(
+                        Channels::Lobby,
+                        &protocol::LeaveLobby::new(current_lobby.id),
+                    );
                 }
 
                 if ui.button("Start game").clicked() {

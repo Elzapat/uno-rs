@@ -81,7 +81,7 @@ impl Plugin for GamePlugin {
 }
 
 fn run_if_in_game(game_state: Res<State<GameState>>) -> ShouldRun {
-    if game_state.current() == &GameState::Game {
+    if game_state.current() == &GameState::Game || game_state.current() == &GameState::EndLobby {
         ShouldRun::Yes
     } else {
         ShouldRun::No
@@ -104,12 +104,15 @@ fn start_game(
     #[allow(clippy::never_loop)]
     for StartGameEvent(clients) in start_game_event.iter() {
         for client in clients.iter() {
+            info!("CLIENT STRAT GAME = {client:?}");
             let mut client = client.clone();
             client.hand = vec![Card::back(); 7];
             commands.spawn().insert(Player(client));
         }
 
-        game_state.set(GameState::Game).unwrap();
+        if game_state.current() != &GameState::Game {
+            game_state.set(GameState::Game).unwrap();
+        }
         break;
     }
 }
@@ -147,14 +150,20 @@ fn execute_packets(
     mut current_color: ResMut<CurrentColor>,
 ) {
     for MessageEvent(channel, message) in message_events.iter() {
-        if *channel != Channels::Game {
-            return;
-        }
+        info!("RECEIVED MESSAGE IN GAME");
+        // if *channel != Channels::Game {
+        //     info!("WRONG CHANNEL NOT GAME");
+        //     match message {
+        //         Protocol::StartGame(_) => info!("START GAME"),
+        //         _ => info!("SOMETHING ELSE"),
+        //     }
+        //     return;
+        // }
 
         match message {
-            Protocol::GameEnd(winner) => game_end_event.send(GameEndEvent(
-                Uuid::from_slice(winner.winner_id.as_bytes()).unwrap(),
-            )),
+            Protocol::GameEnd(winner) => {
+                game_end_event.send(GameEndEvent(Uuid::parse_str(&*winner.winner_id).unwrap()))
+            }
             Protocol::DrawCard(card) => {
                 draw_card_event.send(DrawCardEvent((*card.color, *card.value).into()))
             }
@@ -165,14 +174,14 @@ fn execute_packets(
                 played_card_validation_event.send(PlayedCardValidationEvent(*validation.valid));
             }
             Protocol::PassTurn(playing_player) => {
-                let uuid = Uuid::from_slice(playing_player.playing_id.as_bytes()).unwrap();
+                let uuid = Uuid::parse_str(&*playing_player.playing_id).unwrap();
 
                 for (_, mut player) in players_query.iter_mut() {
                     player.is_playing = player.id == uuid;
                 }
             }
             Protocol::YourPlayerId(id) => {
-                let uuid = Uuid::from_slice(id.player_id.as_bytes()).unwrap();
+                let uuid = Uuid::parse_str(&*id.player_id).unwrap();
                 for (entity, player) in players_query.iter() {
                     if player.id == uuid {
                         commands.entity(entity).insert(ThisPlayer);
@@ -181,7 +190,7 @@ fn execute_packets(
                 }
             }
             Protocol::HandSize(hand) => {
-                let uuid = Uuid::from_slice(hand.player_id.as_bytes()).unwrap();
+                let uuid = Uuid::parse_str(&*hand.player_id).unwrap();
 
                 for (_, mut player) in players_query.iter_mut() {
                     if player.id == uuid {
@@ -210,7 +219,7 @@ fn execute_packets(
                 }
             }
             Protocol::PlayerScore(score) => {
-                let uuid = Uuid::from_slice(score.player_id.as_bytes()).unwrap();
+                let uuid = Uuid::parse_str(&*score.player_id).unwrap();
 
                 for (_, mut player) in players_query.iter_mut() {
                     if player.id == uuid {

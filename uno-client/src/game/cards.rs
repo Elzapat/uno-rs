@@ -233,11 +233,12 @@ fn reorganize_hand(
         }
 
         // Check if any index is missing, to not create a hole in the player's hand
-        let max_index = query.iter().map(|(_, item, _)| item.index).max().unwrap();
-        if max_index >= hand.size {
-            for (idx, (_, mut item, mut card_position)) in query.iter_mut().enumerate() {
-                item.index = idx;
-                card_position.0.z = BASE_CARD_Z + idx as f32 * Z_INCREASE;
+        if let Some(max_index) = query.iter().map(|(_, item, _)| item.index).max() {
+            if max_index >= hand.size {
+                for (idx, (_, mut item, mut card_position)) in query.iter_mut().enumerate() {
+                    item.index = idx;
+                    card_position.0.z = BASE_CARD_Z + idx as f32 * Z_INCREASE;
+                }
             }
         }
     }
@@ -256,6 +257,7 @@ fn card_dropped(
             && transform.translation.y < DISCARD_POS.1 + CARD_DROP_ZONE
             && transform.translation.y > DISCARD_POS.1 - CARD_DROP_ZONE
         {
+            info!("card dropped system in if");
             commands
                 .entity(entity)
                 .remove::<Dropped>()
@@ -276,7 +278,8 @@ fn play_card(
     mut client: Client<Protocol, Channels>,
 ) {
     for PlayCardEvent(card) in play_card_event.iter() {
-        client.send_message(Channels::Game, &protocol::PlayCard::new(*card));
+        info!("sending play card packet");
+        client.send_message(Channels::Uno, &protocol::PlayCard::new(*card));
     }
 }
 
@@ -325,7 +328,7 @@ pub fn color_chosen(
     mut color_chosen_event: EventReader<ColorChosenEvent>,
 ) {
     for ColorChosenEvent(color) in color_chosen_event.iter() {
-        client.send_message(Channels::Game, &protocol::ColorChosen::new(*color));
+        client.send_message(Channels::Uno, &protocol::ColorChosen::new(*color));
     }
 }
 

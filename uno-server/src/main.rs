@@ -1,18 +1,18 @@
 #![feature(drain_filter)]
 
-use log::error;
 use server::Server;
 use simple_logger::SimpleLogger;
 
 pub mod client;
 pub mod game;
+pub mod world;
 
 mod server;
 
 fn main() {
-    SimpleLogger::new().init().unwrap();
-
-    if let Err(e) = Server::new().run() {
-        error!("{}", e);
-    }
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Debug)
+        .init()
+        .unwrap();
+    Server::new().run();
 }
