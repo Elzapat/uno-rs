@@ -194,19 +194,10 @@ impl Game {
 
             let mut in_uno = false;
             if self.clients[self.turn_index].player.hand.len() == 1 {
-                if self.clients[self.turn_index].player.state == PlayerState::ChoosingColorWild {
-                    self.clients[self.turn_index].player.state =
-                        PlayerState::ChoosingColorWildUno([false; 2]);
-                } else if self.clients[self.turn_index].player.state
-                    == PlayerState::ChoosingColorWildFour
-                {
-                    self.clients[self.turn_index].player.state =
-                        PlayerState::ChoosingColorWildFourUno([false; 2]);
-                } else {
-                    self.clients[self.turn_index].player.state = PlayerState::Uno;
-                }
+                self.clients[self.turn_index].player.state = PlayerState::Uno;
                 in_uno = true;
             }
+
             for client in self.clients.iter_mut() {
                 if client.player.state == PlayerState::WaitingToPlay {
                     server.send_message(
@@ -279,11 +270,13 @@ impl Game {
 
             return if in_uno { false } else { pass_turn };
         } else if let Some(skip_turn) = wild_four_played {
+            let next_player_index = self.next_player_index();
+
             for _ in 0..4 {
                 let card = self.draw_card();
-                self.clients[self.turn_index].player.hand.push(card);
+                self.clients[next_player_index].player.hand.push(card);
                 server.send_message(
-                    &self.clients[self.next_player_index()].user_key,
+                    &self.clients[next_player_index].user_key,
                     Channels::Uno,
                     &protocol::DrawCard::new(card),
                 );
