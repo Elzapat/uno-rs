@@ -1,5 +1,8 @@
 use super::{LobbiesList, LobbyState};
-use crate::{game::StartGameEvent, utils::errors::Error};
+use crate::{
+    game::{ExtraMessageEvent, StartGameEvent},
+    utils::errors::Error,
+};
 use bevy::prelude::*;
 use naia_bevy_client::events::MessageEvent;
 use uno::Player;
@@ -15,15 +18,16 @@ pub fn execute_packets(
     mut lobbies: ResMut<LobbiesList>,
     mut start_game_event: EventWriter<StartGameEvent>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
+    mut extra_message_events: EventWriter<ExtraMessageEvent>,
 ) {
-    for MessageEvent(_, message) in message_events.iter() {
-        match message {
+    for MessageEvent(_, protocol) in message_events.iter() {
+        match protocol {
             Protocol::StartGame(_) => {
                 info!("RECEIVING GAME STARTO");
                 if let LobbyState::InLobby(lobby_id) = lobby_state.current() {
                     for lobby in lobbies.iter() {
                         if lobby.id == *lobby_id {
-                            start_game_event.send(StartGameEvent(lobby.players.clone()))
+                            start_game_event.send(StartGameEvent(lobby.players.clone()));
                         }
                     }
                 }
@@ -91,7 +95,11 @@ pub fn execute_packets(
                     message: (*error.error).clone(),
                 });
             }
-            _ => {}
+            protocol => {
+                info!("woopsies extra messages in lobby");
+                extra_message_events.send(ExtraMessageEvent(protocol.clone()));
+                return;
+            }
         };
     }
 }

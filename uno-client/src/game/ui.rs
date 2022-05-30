@@ -55,8 +55,8 @@ fn egui_test_window(mut ctx: ResMut<EguiContext>) {
 
 fn end_game_lobby(
     mut egui_context: ResMut<EguiContext>,
-    winner_query: Query<&Player, With<Winner>>,
-    players_query: Query<&Player, Without<Winner>>,
+    winner_query: Query<(&Player, Option<&ThisPlayer>), With<Winner>>,
+    players_query: Query<(&Player, Option<&ThisPlayer>), Without<Winner>>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -82,10 +82,18 @@ fn end_game_lobby(
 
             ui.separator();
 
-            if let Ok(winner) = winner_query.get_single() {
+            if let Ok((winner, this_player)) = winner_query.get_single() {
+                let mut first_label = egui::RichText::new(&winner.username);
+                let mut second_label = egui::RichText::new(winner.score.to_string());
+
+                if this_player.is_some() {
+                    first_label = first_label.strong();
+                    second_label = second_label.strong();
+                }
+
                 ui.columns(3, |cols| {
-                    cols[0].label(egui::RichText::new(&winner.username).strong());
-                    cols[1].label(egui::RichText::new(winner.score.to_string()).strong());
+                    cols[0].label(first_label);
+                    cols[1].label(second_label);
                 });
             }
 
@@ -93,12 +101,17 @@ fn end_game_lobby(
 
             let players = players_query
                 .iter()
-                .sorted_by(|p1, p2| p1.score.cmp(&p2.score));
+                .sorted_by(|(p1, _), (p2, _)| p1.score.cmp(&p2.score));
 
-            for player in players {
+            for (player, this_player) in players {
                 ui.columns(3, |cols| {
-                    cols[0].label(&player.username);
-                    cols[1].label(player.score.to_string());
+                    if this_player.is_some() {
+                        cols[0].label(egui::RichText::new(&player.username).strong());
+                        cols[1].label(egui::RichText::new(player.score.to_string()).strong());
+                    } else {
+                        cols[0].label(&player.username);
+                        cols[1].label(player.score.to_string());
+                    }
 
                     small_card_count(&mut cols[2], player, Color::Yellow);
                 });
@@ -133,7 +146,7 @@ fn players_panel(
                         let mut text = egui::RichText::new(&player.username);
 
                         if this_player.is_some() {
-                            text = text.color(egui::Color32::LIGHT_BLUE);
+                            text = text.color(egui::Color32::WHITE);
                         }
 
                         ui.label(text);
@@ -194,7 +207,7 @@ fn call_uno_window(
             egui::Align2::RIGHT_BOTTOM,
             egui::Vec2::new(-50.0, -50.0),
             || {
-                client.send_message(Channels::Game, &protocol::Uno::new());
+                client.send_message(Channels::Uno, &protocol::Uno::new());
                 commands.entity(entity).despawn();
             },
         );
@@ -205,7 +218,7 @@ fn call_uno_window(
             egui::Align2::RIGHT_BOTTOM,
             egui::Vec2::new(-50.0, -50.0),
             || {
-                client.send_message(Channels::Game, &protocol::CounterUno::new());
+                client.send_message(Channels::Uno, &protocol::CounterUno::new());
                 commands.entity(entity).despawn();
             },
         );
@@ -225,7 +238,7 @@ fn draw_card_window(
             egui::Align2::LEFT_BOTTOM,
             egui::Vec2::new(50.0, -50.0),
             || {
-                client.send_message(Channels::Game, &protocol::DrawCard::new(Card::back()));
+                client.send_message(Channels::Uno, &protocol::DrawCard::new(Card::back()));
                 commands.entity(entity).despawn();
             },
         );

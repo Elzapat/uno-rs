@@ -35,9 +35,9 @@ pub struct Server {
 impl Server {
     pub fn new() -> Server {
         let server_addresses = ServerAddrs::new(
-            "192.168.1.171:2905".parse().unwrap(),
-            "192.168.1.171:2904".parse().unwrap(),
-            "http://192.168.1.171:2905",
+            "127.0.0.1:3478".parse().unwrap(),
+            "127.0.0.1:3478".parse().unwrap(),
+            "http://127.0.0.1:3478",
         );
 
         let mut server = NaiaServer::new(
@@ -76,6 +76,14 @@ impl Server {
                         // self.server.accept_connection(&user_key);
                         self.server.room_mut(&room_key).add_user(&user_key);
                         self.clients.push(Client::new(user_key));
+
+                        for lobby in &self.lobbies {
+                            self.server.send_message(
+                                &user_key,
+                                Channels::Uno,
+                                &protocol::LobbyInfo::new(lobby),
+                            );
+                        }
                     }
                     Ok(Event::Disconnection(user_key, _)) => {
                         log::info!("DISCONNECT :(");
@@ -83,12 +91,7 @@ impl Server {
                     }
                     Ok(Event::Message(user_key, channel, protocol)) => {
                         log::info!("received message");
-                        if let Protocol::PlayCard(_) = protocol {
-                            log::info!(" received play card protocol");
-                        }
-
                         if let Some(game_protocol) = self.execute_command(user_key, protocol) {
-                            log::info!("beurk y'a un protocol en trop wtf");
                             for game in &mut self.games {
                                 if game.clients.iter().any(|c| c.user_key == user_key)
                                     && game.execute_commands(

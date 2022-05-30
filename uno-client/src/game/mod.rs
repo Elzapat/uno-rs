@@ -54,6 +54,8 @@ pub struct ColorChosenEvent(pub Color);
 pub struct PlayedCardValidationEvent(pub bool);
 #[derive(Deref, DerefMut)]
 pub struct GameEndEvent(pub Uuid);
+#[derive(Deref, DerefMut)]
+pub struct ExtraMessageEvent(pub Protocol);
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -64,11 +66,13 @@ impl Plugin for GamePlugin {
             .add_event::<ColorChosenEvent>()
             .add_event::<PlayedCardValidationEvent>()
             .add_event::<GameEndEvent>()
+            .add_event::<ExtraMessageEvent>()
             .add_startup_system(load_assets)
             .add_system(start_game)
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_in_game)
+                    .with_system(extra_messages)
                     .with_system(execute_packets)
                     .with_system(to_be_removed),
             )
@@ -81,7 +85,7 @@ impl Plugin for GamePlugin {
 }
 
 fn run_if_in_game(game_state: Res<State<GameState>>) -> ShouldRun {
-    if game_state.current() == &GameState::Game || game_state.current() == &GameState::EndLobby {
+    if game_state.current() == &GameState::Game {
         ShouldRun::Yes
     } else {
         ShouldRun::No
@@ -137,6 +141,15 @@ fn load_assets(
     });
 }
 
+fn extra_messages(
+    mut extra_message_events: EventReader<ExtraMessageEvent>,
+    mut message_events: EventWriter<MessageEvent<Protocol, Channels>>,
+) {
+    for ExtraMessageEvent(extra_message) in extra_message_events.iter() {
+        message_events.send(MessageEvent(Channels::Uno, extra_message.clone()));
+    }
+}
+
 fn execute_packets(
     mut commands: Commands,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
@@ -149,17 +162,7 @@ fn execute_packets(
     mut game_end_event: EventWriter<GameEndEvent>,
     mut current_color: ResMut<CurrentColor>,
 ) {
-    for MessageEvent(channel, message) in message_events.iter() {
-        info!("RECEIVED MESSAGE IN GAME");
-        // if *channel != Channels::Game {
-        //     info!("WRONG CHANNEL NOT GAME");
-        //     match message {
-        //         Protocol::StartGame(_) => info!("START GAME"),
-        //         _ => info!("SOMETHING ELSE"),
-        //     }
-        //     return;
-        // }
-
+    for MessageEvent(_, message) in message_events.iter() {
         match message {
             Protocol::GameEnd(winner) => {
                 game_end_event.send(GameEndEvent(Uuid::parse_str(&*winner.winner_id).unwrap()))

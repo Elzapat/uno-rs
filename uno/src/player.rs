@@ -8,8 +8,10 @@ pub enum PlayerState {
     DrawingCard,
     ChoosingColorWild,
     ChoosingColorWildFour,
-    ChoosingColorWildUno,
-    ChoosingColorWildFourUno,
+    /// Player has to choose a color and confirm Uno, keep state of both actions to proceed only
+    /// when both are done
+    ChoosingColorWildUno([bool; 2]),
+    ChoosingColorWildFourUno([bool; 2]),
     Uno,
 }
 

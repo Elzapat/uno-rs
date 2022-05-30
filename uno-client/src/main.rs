@@ -68,5 +68,5 @@ fn main() {
 fn setup(mut commands: Commands, mut client: Client<Protocol, Channels>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     client.auth(uno::network::protocol::Uno::new());
-    client.connect("http://192.168.1.171:2905");
+    client.connect("http://127.0.0.1:3478");
 }

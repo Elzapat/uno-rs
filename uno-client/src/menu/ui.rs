@@ -30,7 +30,7 @@ pub fn settings_panel(
                     });
                 } else {
                     client.send_message(
-                        Channels::Lobby,
+                        Channels::Uno,
                         &protocol::Username::new(settings.username.clone()),
                     );
                 }
@@ -81,7 +81,7 @@ pub fn lobby_panel(
                                             });
                                         } else {
                                             client.send_message(
-                                                Channels::Lobby,
+                                                Channels::Uno,
                                                 &protocol::JoinLobby::new(lobby.id, Vec::new()),
                                             );
                                         }
@@ -96,7 +96,7 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Create lobby").clicked() {
-                    client.send_message(Channels::Lobby, &protocol::CreateLobby::new());
+                    client.send_message(Channels::Uno, &protocol::CreateLobby::new());
                 }
             });
         }),
@@ -130,13 +130,13 @@ pub fn lobby_panel(
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
                     client.send_message(
-                        Channels::Lobby,
+                        Channels::Uno,
                         &protocol::LeaveLobby::new(current_lobby.id),
                     );
                 }
 
                 if ui.button("Start game").clicked() {
-                    client.send_message(Channels::Lobby, &protocol::StartGame::new());
+                    client.send_message(Channels::Uno, &protocol::StartGame::new());
                 }
             });
         }),

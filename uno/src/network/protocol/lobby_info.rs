@@ -1,6 +1,5 @@
-use crate::lobby::LobbyId;
+use crate::lobby::{Lobby, LobbyId};
 use bevy_ecs::prelude::Component;
-use uuid::Uuid;
 
 use naia_shared::{Property, Replicate};
 
@@ -12,12 +11,14 @@ pub struct LobbyInfo {
 }
 
 impl LobbyInfo {
-    pub fn new(lobby_id: LobbyId, players: Vec<(Uuid, String)>) -> Self {
+    pub fn new(lobby: &Lobby) -> Self {
         LobbyInfo::new_complete(
-            lobby_id,
-            players
+            lobby.id,
+            lobby
+                .players
+                .clone()
                 .iter()
-                .map(|(id, name)| (id.to_string(), name.clone()))
+                .map(|player| (player.id.to_string(), player.username.clone()))
                 .collect(),
         )
     }

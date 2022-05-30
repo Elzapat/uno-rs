@@ -93,9 +93,9 @@ impl Game {
         protocol: Protocol,
     ) -> bool {
         let mut card_played = None;
-        let mut wild_four_played = false;
-        let mut stop_uno = false;
-        let mut stop_counter_uno = false;
+        let mut wild_four_played = None;
+        let mut uno = None;
+        let mut counter_uno = None;
         let mut draw_card = false;
 
         log::info!("executing game command on user_key");
@@ -106,8 +106,9 @@ impl Game {
                     log::info!("RECEIVINg PLAY CARD PACKET");
                     if client.player.state == PlayerState::PlayingCard {
                         let card: Card = (*card.color, *card.value).into();
-                        let valid =
-                            card.can_be_played(*self.discard.top().unwrap(), self.current_color);
+                        let valid = card
+                            .can_be_played(*self.discard.top().unwrap(), self.current_color)
+                            && client.player.hand.contains(&card);
 
                         server.send_message(
                             &user_key,
@@ -126,28 +127,62 @@ impl Game {
                         );
                     }
                 }
-                Protocol::ColorChosen(color) => {
-                    if client.player.state == PlayerState::ChoosingColorWild
-                        || client.player.state == PlayerState::ChoosingColorWildFour
-                        || client.player.state == PlayerState::ChoosingColorWildUno
-                        || client.player.state == PlayerState::ChoosingColorWildFourUno
-                    {
+                Protocol::ColorChosen(color) => match client.player.state {
+                    PlayerState::ChoosingColorWildUno(ref mut actions_done) => {
                         self.current_color = (*color.color).into();
-
-                        if client.player.state == PlayerState::ChoosingColorWildFour {
-                            wild_four_played = true;
-                        } else {
-                            return true;
-                        }
+                        actions_done[0] = true;
+                        return actions_done.iter().all(|&a| a);
                     }
-                }
+                    PlayerState::ChoosingColorWildFourUno(ref mut actions_done) => {
+                        self.current_color = (*color.color).into();
+                        actions_done[0] = true;
+                        wild_four_played = Some(actions_done.iter().all(|&a| a))
+                    }
+                    PlayerState::ChoosingColorWild => {
+                        self.current_color = (*color.color).into();
+                        return true;
+                    }
+                    PlayerState::ChoosingColorWildFour => {
+                        self.current_color = (*color.color).into();
+                        wild_four_played = Some(true);
+                    }
+                    _ => {}
+                },
                 Protocol::DrawCard(_) => {
                     if client.player.state == PlayerState::DrawingCard {
                         draw_card = true;
                     }
                 }
-                Protocol::Uno(_) => stop_uno = true,
-                Protocol::CounterUno(_) => stop_counter_uno = true,
+                Protocol::Uno(_) => {
+                    if let PlayerState::ChoosingColorWildUno(ref mut actions_done) =
+                        client.player.state
+                    {
+                        actions_done[1] = true;
+                        uno = Some(actions_done.iter().all(|&a| a))
+                    } else if let PlayerState::ChoosingColorWildFourUno(ref mut actions_done) =
+                        client.player.state
+                    {
+                        actions_done[1] = true;
+                        uno = Some(actions_done.iter().all(|&a| a))
+                    } else {
+                        uno = Some(true);
+                    }
+                }
+                Protocol::CounterUno(_) => {
+                    if let PlayerState::ChoosingColorWildUno(ref mut actions_done) =
+                        client.player.state
+                    {
+                        actions_done[1] = true;
+                        counter_uno = Some(actions_done.iter().all(|&a| a))
+                    } else if let PlayerState::ChoosingColorWildFourUno(ref mut actions_done) =
+                        client.player.state
+                    {
+                        actions_done[1] = true;
+                        counter_uno = Some(actions_done.iter().all(|&a| a))
+                    } else {
+                        counter_uno = Some(true);
+                    }
+                }
                 _ => return false,
             }
         }
@@ -171,12 +206,13 @@ impl Game {
             let mut in_uno = false;
             if self.clients[self.turn_index].player.hand.len() == 1 {
                 if self.clients[self.turn_index].player.state == PlayerState::ChoosingColorWild {
-                    self.clients[self.turn_index].player.state = PlayerState::ChoosingColorWildUno;
+                    self.clients[self.turn_index].player.state =
+                        PlayerState::ChoosingColorWildUno([false; 2]);
                 } else if self.clients[self.turn_index].player.state
                     == PlayerState::ChoosingColorWildFour
                 {
                     self.clients[self.turn_index].player.state =
-                        PlayerState::ChoosingColorWildFourUno;
+                        PlayerState::ChoosingColorWildFourUno([false; 2]);
                 } else {
                     self.clients[self.turn_index].player.state = PlayerState::Uno;
                 }
@@ -232,7 +268,7 @@ impl Game {
                 Value::Wild => {
                     self.clients[self.turn_index].player.state =
                         if self.clients[self.turn_index].player.hand.len() == 1 {
-                            PlayerState::ChoosingColorWildUno
+                            PlayerState::ChoosingColorWildUno([false; 2])
                         } else {
                             PlayerState::ChoosingColorWild
                         };
@@ -242,7 +278,7 @@ impl Game {
                 Value::WildFour => {
                     self.clients[self.turn_index].player.state =
                         if self.clients[self.turn_index].player.hand.len() == 1 {
-                            PlayerState::ChoosingColorWildFourUno
+                            PlayerState::ChoosingColorWildFourUno([false; 2])
                         } else {
                             PlayerState::ChoosingColorWildFour
                         };
@@ -253,21 +289,24 @@ impl Game {
             };
 
             return if in_uno { false } else { pass_turn };
-        } else if wild_four_played {
-            self.pass_turn(server, true);
-
+        } else if let Some(skip_turn) = wild_four_played {
             for _ in 0..4 {
                 let card = self.draw_card();
                 self.clients[self.turn_index].player.hand.push(card);
                 server.send_message(
-                    &self.clients[self.turn_index].user_key,
+                    &self.clients[self.next_player_index()].user_key,
                     Channels::Uno,
                     &protocol::DrawCard::new(card),
                 );
             }
 
-            return true;
-        } else if stop_uno {
+            return if skip_turn {
+                self.pass_turn(server, true);
+                true
+            } else {
+                false
+            };
+        } else if let Some(skip_turn) = uno {
             for client in self.clients.iter_mut() {
                 server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
                 server.send_message(
@@ -277,8 +316,8 @@ impl Game {
                 );
             }
 
-            return true;
-        } else if stop_counter_uno {
+            return skip_turn;
+        } else if let Some(skip_turn) = uno {
             for client in self.clients.iter_mut() {
                 server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
                 server.send_message(
@@ -298,7 +337,7 @@ impl Game {
                 );
             }
 
-            return true;
+            return skip_turn;
         } else if draw_card {
             let card = self.draw_card();
             self.clients[self.turn_index].player.hand.push(card);
@@ -324,16 +363,8 @@ impl Game {
         false
     }
 
-    pub fn pass_turn(&mut self, server: &mut NaiaServer, passing_turn: bool) {
-        if self.reverse_turn {
-            if self.turn_index == 0 {
-                self.turn_index = self.clients.len() - 1;
-            } else {
-                self.turn_index -= 1;
-            }
-        } else {
-            self.turn_index = (self.turn_index + 1) % self.clients.len();
-        }
+    pub fn pass_turn(&mut self, server: &mut NaiaServer, skipping_a_turn: bool) {
+        self.turn_index = self.next_player_index();
 
         let id = self.clients[self.turn_index].id;
         let nb_cards = self.clients[self.turn_index].player.hand.len();
@@ -357,7 +388,7 @@ impl Game {
             );
         }
 
-        if !passing_turn {
+        if !skipping_a_turn {
             let playing_client = &mut self.clients[self.turn_index];
             if !playing_client
                 .player
@@ -372,6 +403,18 @@ impl Game {
             } else {
                 playing_client.player.state = PlayerState::PlayingCard;
             }
+        }
+    }
+
+    fn next_player_index(&self) -> usize {
+        if self.reverse_turn {
+            if self.turn_index == 0 {
+                self.clients.len() - 1
+            } else {
+                self.turn_index - 1
+            }
+        } else {
+            (self.turn_index + 1) % self.clients.len()
         }
     }
 
