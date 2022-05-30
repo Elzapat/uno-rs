@@ -2,7 +2,10 @@ use super::{
     run_if_in_end_game_lobby, run_if_in_game, CallCounterUno, CallUno, ChooseColor,
     ColorChosenEvent, CurrentColor, DrawCard, Player, ThisPlayer, Winner,
 };
-use crate::utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS};
+use crate::{
+    utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS},
+    GameState,
+};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use itertools::Itertools;
@@ -57,6 +60,7 @@ fn end_game_lobby(
     mut egui_context: ResMut<EguiContext>,
     winner_query: Query<(&Player, Option<&ThisPlayer>), With<Winner>>,
     players_query: Query<(&Player, Option<&ThisPlayer>), Without<Winner>>,
+    mut game_state: ResMut<State<GameState>>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -120,12 +124,12 @@ fn end_game_lobby(
             }
 
             ui.vertical_centered(|ui| {
-                if ui.button("Replay").clicked() {
-                    todo!();
-                }
+                // if ui.button("Replay").clicked() {
+                //     todo!();
+                // }
 
                 if ui.button("Back to menu").clicked() {
-                    todo!();
+                    game_state.set(GameState::Lobbies).unwrap();
                 }
             })
         });

@@ -257,7 +257,6 @@ fn card_dropped(
             && transform.translation.y < DISCARD_POS.1 + CARD_DROP_ZONE
             && transform.translation.y > DISCARD_POS.1 - CARD_DROP_ZONE
         {
-            info!("card dropped system in if");
             commands
                 .entity(entity)
                 .remove::<Dropped>()
@@ -278,7 +277,6 @@ fn play_card(
     mut client: Client<Protocol, Channels>,
 ) {
     for PlayCardEvent(card) in play_card_event.iter() {
-        info!("sending play card packet");
         client.send_message(Channels::Uno, &protocol::PlayCard::new(*card));
     }
 }

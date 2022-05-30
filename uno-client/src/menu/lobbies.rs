@@ -23,13 +23,18 @@ pub fn execute_packets(
     for MessageEvent(_, protocol) in message_events.iter() {
         match protocol {
             Protocol::StartGame(_) => {
-                info!("RECEIVING GAME STARTO");
                 if let LobbyState::InLobby(lobby_id) = lobby_state.current() {
                     for lobby in lobbies.iter() {
                         if lobby.id == *lobby_id {
                             start_game_event.send(StartGameEvent(lobby.players.clone()));
+                            break;
                         }
                     }
+                }
+
+                if lobby_state.current() != &LobbyState::LobbiesList {
+                    lobby_state.set(LobbyState::LobbiesList).unwrap();
+                    lobbies.clear();
                 }
             }
             Protocol::JoinLobby(lobby) => {
@@ -96,7 +101,6 @@ pub fn execute_packets(
                 });
             }
             protocol => {
-                info!("woopsies extra messages in lobby");
                 extra_message_events.send(ExtraMessageEvent(protocol.clone()));
                 return;
             }

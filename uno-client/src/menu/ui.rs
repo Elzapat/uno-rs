@@ -1,4 +1,4 @@
-use super::{LobbiesList, Lobby, LobbyState};
+use super::{LobbiesList, LobbyState};
 use crate::{utils::errors::Error, Settings};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
@@ -129,10 +129,8 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
-                    client.send_message(
-                        Channels::Uno,
-                        &protocol::LeaveLobby::new(current_lobby.id),
-                    );
+                    client
+                        .send_message(Channels::Uno, &protocol::LeaveLobby::new(current_lobby.id));
                 }
 
                 if ui.button("Start game").clicked() {
@@ -146,6 +144,7 @@ pub fn lobby_panel(
     };
 }
 
+/*
 pub fn unconnected_panel(
     commands: Commands,
     mut egui_context: ResMut<EguiContext>,
@@ -165,3 +164,4 @@ pub fn unconnected_panel(
             });
         });
 }
+*/

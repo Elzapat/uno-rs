@@ -35,8 +35,8 @@ pub struct Server {
 impl Server {
     pub fn new() -> Server {
         let server_addresses = ServerAddrs::new(
-            "127.0.0.1:3478".parse().unwrap(),
-            "127.0.0.1:3478".parse().unwrap(),
+            "0.0.0.0:3478".parse().unwrap(),
+            "0.0.0.0:3478".parse().unwrap(),
             "http://127.0.0.1:3478",
         );
 
@@ -68,7 +68,6 @@ impl Server {
                         self.server.accept_connection(&user_key);
                     }
                     Ok(Event::Connection(user_key)) => {
-                        log::info!("CONNECTION");
                         log::info!(
                             "Naia Server connected to: {}",
                             self.server.user(&user_key).address()
@@ -77,20 +76,13 @@ impl Server {
                         self.server.room_mut(&room_key).add_user(&user_key);
                         self.clients.push(Client::new(user_key));
 
-                        for lobby in &self.lobbies {
-                            self.server.send_message(
-                                &user_key,
-                                Channels::Uno,
-                                &protocol::LobbyInfo::new(lobby),
-                            );
-                        }
+                        self.send_lobbies_info(&user_key);
                     }
                     Ok(Event::Disconnection(user_key, _)) => {
                         log::info!("DISCONNECT :(");
                         self.clients.retain(|c| c.user_key != user_key);
                     }
-                    Ok(Event::Message(user_key, channel, protocol)) => {
-                        log::info!("received message");
+                    Ok(Event::Message(user_key, _, protocol)) => {
                         if let Some(game_protocol) = self.execute_command(user_key, protocol) {
                             for game in &mut self.games {
                                 if game.clients.iter().any(|c| c.user_key == user_key)
@@ -136,7 +128,6 @@ impl Server {
         {
             match protocol {
                 Protocol::StartGame(_) => {
-                    log::info!("RECEIVED GAME START");
                     if let Some(lobby_id) = client.in_lobby {
                         start_game = Some(lobby_id);
                         self.lobbies.retain(|lobby| lobby.id != lobby_id);
@@ -217,11 +208,9 @@ impl Server {
                     }
                 }
                 Protocol::Username(player) => {
-                    log::info!("RECEIVED USERNAME");
                     client.player.username = (*player.username).clone();
                 }
                 protocol => {
-                    log::info!("unknown proto returning");
                     return Some(protocol);
                 }
             }
@@ -257,13 +246,7 @@ impl Server {
             // Get clients in lobby
             let mut game_clients = self
                 .clients
-                .drain_filter(|client| {
-                    if let Some(id) = client.in_lobby {
-                        id == lobby_id
-                    } else {
-                        false
-                    }
-                })
+                .drain_filter(|client| client.in_lobby == Some(lobby_id))
                 .collect::<Vec<Client>>();
 
             // Tell clients the lobby the game was started in is gone
@@ -276,16 +259,9 @@ impl Server {
             }
 
             self.lobbies.retain(|l| l.id != lobby_id);
-            for client in game_clients.iter() {
-                log::info!(
-                    "client address = {}",
-                    self.server.user(&client.user_key).address()
-                );
-            }
 
-            log::info!("GMAE CLIENTS LEN = {}", game_clients.len());
             for client in game_clients.iter_mut() {
-                log::info!("SENDING GAME STARTOOO");
+                client.in_lobby = None;
                 self.server.send_message(
                     &client.user_key,
                     Channels::Uno,
@@ -297,5 +273,12 @@ impl Server {
         }
 
         None
+    }
+
+    fn send_lobbies_info(&mut self, user_key: &UserKey) {
+        for lobby in &self.lobbies {
+            self.server
+                .send_message(&user_key, Channels::Uno, &protocol::LobbyInfo::new(lobby));
+        }
     }
 }

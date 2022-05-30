@@ -39,7 +39,6 @@ pub struct Winner;
 
 // Ressources
 pub struct GameAssets {
-    background: Handle<Image>,
     cards: Handle<TextureAtlas>,
 }
 #[derive(Deref, DerefMut)]
@@ -79,8 +78,7 @@ impl Plugin for GamePlugin {
             .add_system_set_to_stage(
                 CoreStage::PostUpdate,
                 SystemSet::new().with_system(game_end),
-            )
-            .add_system_set(SystemSet::on_enter(GameState::Game).with_system(setup));
+            );
     }
 }
 
@@ -108,7 +106,6 @@ fn start_game(
     #[allow(clippy::never_loop)]
     for StartGameEvent(clients) in start_game_event.iter() {
         for client in clients.iter() {
-            info!("CLIENT STRAT GAME = {client:?}");
             let mut client = client.clone();
             client.hand = vec![Card::back(); 7];
             commands.spawn().insert(Player(client));
@@ -135,9 +132,17 @@ fn load_assets(
         Vec2::splat(CARD_PADDING),
     );
 
+    let background = asset_server.load("game_background.png");
+
     commands.insert_resource(GameAssets {
-        background: asset_server.load("game_background.png"),
         cards: texture_atlases.add(cards_atlas),
+    });
+
+    // Game background
+    commands.spawn_bundle(SpriteBundle {
+        texture: background,
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        ..SpriteBundle::default()
     });
 }
 
@@ -235,15 +240,6 @@ fn execute_packets(
             _ => {}
         }
     }
-}
-
-fn setup(mut commands: Commands, game_assets: Res<GameAssets>) {
-    // Game background
-    commands.spawn_bundle(SpriteBundle {
-        texture: game_assets.background.clone(),
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        ..SpriteBundle::default()
-    });
 }
 
 fn to_be_removed(

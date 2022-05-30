@@ -36,33 +36,40 @@ pub struct Settings {
 }
 
 fn main() {
-    App::new()
-        .insert_resource(WindowDescriptor {
-            title: "Uno!".to_owned(),
-            // width: 1920.0,
-            // height: 1080.0,
-            // vsync: false,
-            ..WindowDescriptor::default()
-        })
-        .add_state(GameState::Lobbies)
-        .add_plugins(DefaultPlugins)
-        .add_plugin(EguiPlugin)
-        .add_plugin(ClientPlugin::<Protocol, Channels>::new(
-            ClientConfig::default(),
-            shared_config(),
-        ))
-        .add_plugin(utils::cursor_state::CursorStatePlugin)
-        .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
-        .add_plugin(menu::MenuPlugin)
-        .add_plugin(game::GamePlugin)
-        .add_startup_system(setup)
-        .add_system(utils::errors::display_error)
-        // .add_system(animate_sprite_system)
-        .insert_resource(Settings {
-            username: String::from(""),
-            enable_animations: true,
-        })
-        .run();
+    let mut app = App::new();
+
+    app.insert_resource(WindowDescriptor {
+        title: "Uno!".to_owned(),
+        // width: 1920.0,
+        // height: 1080.0,
+        // vsync: false,
+        ..WindowDescriptor::default()
+    })
+    .add_state(GameState::Lobbies)
+    .add_plugins(DefaultPlugins)
+    .add_plugin(EguiPlugin)
+    .add_plugin(ClientPlugin::<Protocol, Channels>::new(
+        ClientConfig::default(),
+        shared_config(),
+    ))
+    .add_plugin(utils::cursor_state::CursorStatePlugin)
+    .add_plugin(utils::drag_and_drop::DragAndDropPlugin)
+    .add_plugin(menu::MenuPlugin)
+    .add_plugin(game::GamePlugin)
+    .add_startup_system(setup)
+    .add_system(utils::errors::display_error)
+    // .add_system(animate_sprite_system)
+    .insert_resource(Settings {
+        username: String::from(""),
+        enable_animations: true,
+    });
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        app.add_plugin(bevy_web_resizer::Plugin);
+    }
+
+    app.run();
 }
 
 fn setup(mut commands: Commands, mut client: Client<Protocol, Channels>) {

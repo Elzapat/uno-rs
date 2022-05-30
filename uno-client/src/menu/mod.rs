@@ -35,9 +35,7 @@ impl Plugin for MenuPlugin {
                     .with_system(ui::lobby_panel),
             )
             .add_system_set(
-                SystemSet::new()
-                    .with_run_criteria(run_if_not_connected)
-                    .with_system(ui::unconnected_panel),
+                SystemSet::new().with_run_criteria(run_if_not_connected), // .with_system(ui::unconnected_panel),
             );
     }
 }

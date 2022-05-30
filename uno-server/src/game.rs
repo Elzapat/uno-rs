@@ -19,14 +19,6 @@ pub struct Game {
 
 impl Game {
     pub fn new(clients: Vec<Client>, server: &mut NaiaServer) -> Game {
-        log::info!(
-            "{:?}",
-            clients
-                .iter()
-                .map(|c| c.player.clone())
-                .collect::<Vec<uno::Player>>()
-        );
-
         let mut game = Game {
             deck: Deck::full(),
             discard: Deck::empty(),
@@ -98,12 +90,9 @@ impl Game {
         let mut counter_uno = None;
         let mut draw_card = false;
 
-        log::info!("executing game command on user_key");
-
         if let Some(client) = self.clients.iter_mut().find(|c| c.user_key == user_key) {
             match protocol {
                 Protocol::PlayCard(card) => {
-                    log::info!("RECEIVINg PLAY CARD PACKET");
                     if client.player.state == PlayerState::PlayingCard {
                         let card: Card = (*card.color, *card.value).into();
                         let valid = card
@@ -317,7 +306,7 @@ impl Game {
             }
 
             return skip_turn;
-        } else if let Some(skip_turn) = uno {
+        } else if let Some(skip_turn) = counter_uno {
             for client in self.clients.iter_mut() {
                 server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
                 server.send_message(
@@ -454,7 +443,6 @@ impl Game {
     */
 
     fn send_player_ids(&mut self, server: &mut NaiaServer) {
-        log::info!("SENDING PLAYER IDS");
         for client in self.clients.iter_mut() {
             server.send_message(
                 &client.user_key,
@@ -488,7 +476,6 @@ impl Game {
 
     fn give_first_cards(&mut self, server: &mut NaiaServer) {
         // Deal the initial seven cards to the players
-        log::info!("GIVING FIRST CARDS");
         const INITIAL_CARDS: usize = 7;
         for client in self.clients.iter_mut() {
             for _ in 0..INITIAL_CARDS {
@@ -535,6 +522,8 @@ impl Game {
                 Channels::Uno,
                 &protocol::GameEnd::new(winner_uuid),
             );
+
+            client.player.hand.clear();
         }
     }
 
