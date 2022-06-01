@@ -87,7 +87,7 @@ impl Game {
         let mut card_played = None;
         let mut wild_four_played = None;
         let mut uno = None;
-        let mut counter_uno = None;
+        let mut counter_uno = false;
         let mut draw_card = false;
 
         if let Some(client) = self.clients.iter_mut().find(|c| c.user_key == user_key) {
@@ -152,26 +152,17 @@ impl Game {
                         client.player.state
                     {
                         actions_done[1] = true;
-                        uno = Some(actions_done.iter().all(|&a| a))
+                        if actions_done.iter().all(|&a| a) {
+                            self.pass_turn(server, true);
+                            uno = Some(true);
+                        } else {
+                            uno = Some(false);
+                        }
                     } else {
                         uno = Some(true);
                     }
                 }
-                Protocol::CounterUno(_) => {
-                    if let PlayerState::ChoosingColorWildUno(ref mut actions_done) =
-                        client.player.state
-                    {
-                        actions_done[1] = true;
-                        counter_uno = Some(actions_done.iter().all(|&a| a))
-                    } else if let PlayerState::ChoosingColorWildFourUno(ref mut actions_done) =
-                        client.player.state
-                    {
-                        actions_done[1] = true;
-                        counter_uno = Some(actions_done.iter().all(|&a| a))
-                    } else {
-                        counter_uno = Some(true);
-                    }
-                }
+                Protocol::CounterUno(_) => counter_uno = true,
                 _ => return false,
             }
         }
@@ -288,7 +279,7 @@ impl Game {
             } else {
                 false
             };
-        } else if let Some(skip_turn) = uno {
+        } else if let Some(pass_turn) = uno {
             for client in self.clients.iter_mut() {
                 server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
                 server.send_message(
@@ -298,8 +289,8 @@ impl Game {
                 );
             }
 
-            return skip_turn;
-        } else if let Some(skip_turn) = counter_uno {
+            return pass_turn;
+        } else if counter_uno {
             for client in self.clients.iter_mut() {
                 server.send_message(&client.user_key, Channels::Uno, &protocol::StopUno::new());
                 server.send_message(
@@ -319,7 +310,26 @@ impl Game {
                 );
             }
 
-            return skip_turn;
+            let pass_turn = if let PlayerState::ChoosingColorWildUno(ref mut actions_done) =
+                self.clients[self.turn_index].player.state
+            {
+                actions_done[1] = true;
+                actions_done.iter().all(|&a| a)
+            } else if let PlayerState::ChoosingColorWildFourUno(ref mut actions_done) =
+                self.clients[self.turn_index].player.state
+            {
+                actions_done[1] = true;
+                if actions_done.iter().all(|&a| a) {
+                    self.pass_turn(server, true);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            return pass_turn;
         } else if draw_card {
             let card = self.draw_card();
             self.clients[self.turn_index].player.hand.push(card);
