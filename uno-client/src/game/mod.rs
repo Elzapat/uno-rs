@@ -1,4 +1,5 @@
 use crate::{
+    menu::LobbiesList,
     utils::constants::{CARD_HEIGHT, CARD_PADDING, CARD_WIDTH},
     GameState,
 };
@@ -8,7 +9,7 @@ use naia_bevy_client::events::MessageEvent;
 use uno::{
     card::{Card, Color},
     network::{Channels, Protocol},
-    Player as UnoPlayer,
+    Lobby, Player as UnoPlayer,
 };
 use uuid::Uuid;
 
@@ -166,6 +167,7 @@ fn execute_packets(
     mut card_played_event: EventWriter<CardPlayedEvent>,
     mut game_end_event: EventWriter<GameEndEvent>,
     mut current_color: ResMut<CurrentColor>,
+    mut lobbies: ResMut<LobbiesList>,
 ) {
     for MessageEvent(_, message) in message_events.iter() {
         match message {
@@ -237,6 +239,25 @@ fn execute_packets(
                 }
             }
             Protocol::CurrentColor(color) => **current_color = (*color.color).into(),
+            Protocol::LobbyInfo(lobby) => {
+                let players = lobby
+                    .players
+                    .iter()
+                    .map(|(id, name)| UnoPlayer::new(Uuid::parse_str(id).unwrap(), name.clone()))
+                    .collect();
+
+                for existing_lobby in lobbies.iter_mut() {
+                    if existing_lobby.id == *lobby.lobby_id {
+                        existing_lobby.players = players;
+                        return;
+                    }
+                }
+
+                lobbies.push(Lobby {
+                    id: *lobby.lobby_id,
+                    players,
+                });
+            }
             _ => {}
         }
     }
