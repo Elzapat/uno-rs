@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use uno::{
     lobby::{Lobby, LobbyId},
     network::{protocol, shared_config, Channels, Protocol},
+    player::PlayerState,
 };
 
 const MAX_LOBBY_PLAYERS: usize = 10;
@@ -81,6 +82,15 @@ impl Server {
                     Ok(Event::Disconnection(user_key, _)) => {
                         log::info!("DISCONNECT :(");
                         self.clients.retain(|c| c.user_key != user_key);
+                        self.games.retain(|game| {
+                            game.clients.retain(|client| client.user_key != user_key);
+
+                            if game.turn_index >= game.clients.len() {
+                                game.pass_turn(&mut self.server, false);
+                            }
+
+                            !game.clients.is_empty()
+                        });
                     }
                     Ok(Event::Message(user_key, _, protocol)) => {
                         if let Some(game_protocol) = self.execute_command(user_key, protocol) {
@@ -104,6 +114,9 @@ impl Server {
             self.games.retain_mut(|game| {
                 if let Some(winner_uuid) = game.check_if_game_end() {
                     game.game_end(&mut self.server, winner_uuid);
+                    for client in &mut game.clients {
+                        client.player.state = PlayerState::WaitingToPlay;
+                    }
                     self.clients.append(&mut game.clients);
                     false
                 } else {

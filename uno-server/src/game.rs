@@ -12,7 +12,7 @@ pub struct Game {
     pub clients: Vec<Client>,
     deck: Deck,
     discard: Deck,
-    turn_index: usize,
+    pub turn_index: usize,
     reverse_turn: bool,
     current_color: Color,
 }

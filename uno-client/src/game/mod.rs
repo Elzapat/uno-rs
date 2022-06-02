@@ -18,7 +18,7 @@ mod ui;
 pub struct GamePlugin;
 
 // Components
-#[derive(Component, Deref, DerefMut)]
+#[derive(Debug, Component, Deref, DerefMut)]
 pub struct Player(UnoPlayer);
 #[derive(Component)]
 pub struct ThisPlayer;
