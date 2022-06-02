@@ -61,6 +61,7 @@ fn end_game_lobby(
     mut egui_context: ResMut<EguiContext>,
     winner_query: Query<(Entity, &Player, Option<&ThisPlayer>), With<Winner>>,
     players_query: Query<(Entity, &Player, Option<&ThisPlayer>), Without<Winner>>,
+    draw_card_query: Query<Entity, With<DrawCard>>,
     mut game_state: ResMut<State<GameState>>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
@@ -137,6 +138,10 @@ fn end_game_lobby(
                     }
 
                     for (entity, ..) in winner_query.iter() {
+                        commands.entity(entity).despawn();
+                    }
+
+                    for entity in draw_card_query.iter() {
                         commands.entity(entity).despawn();
                     }
                 }

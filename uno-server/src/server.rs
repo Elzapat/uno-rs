@@ -111,18 +111,23 @@ impl Server {
                 }
             }
 
+            let mut new_clients = Vec::new();
             self.games.retain_mut(|game| {
                 if let Some(winner_uuid) = game.check_if_game_end() {
                     game.game_end(&mut self.server, winner_uuid);
                     for client in &mut game.clients {
                         client.player.state = PlayerState::WaitingToPlay;
                     }
-                    self.clients.append(&mut game.clients);
+                    new_clients = game.clients;
                     false
                 } else {
                     true
                 }
             });
+            for client in &new_clients {
+                self.send_lobbies_info(&client.user_key);
+            }
+            self.clients.append(&mut new_clients);
 
             self.server.send_all_updates(world.proxy());
         }
