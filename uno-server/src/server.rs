@@ -38,7 +38,7 @@ impl Server {
         let server_addresses = ServerAddrs::new(
             "0.0.0.0:3478".parse().unwrap(),
             "0.0.0.0:3478".parse().unwrap(),
-            "http://127.0.0.1:3478",
+            "http://82.66.44.38:3478",
         );
 
         let mut server = NaiaServer::new(
@@ -82,7 +82,7 @@ impl Server {
                     Ok(Event::Disconnection(user_key, _)) => {
                         log::info!("DISCONNECT :(");
                         self.clients.retain(|c| c.user_key != user_key);
-                        self.games.retain(|game| {
+                        self.games.retain_mut(|game| {
                             game.clients.retain(|client| client.user_key != user_key);
 
                             if game.turn_index >= game.clients.len() {
