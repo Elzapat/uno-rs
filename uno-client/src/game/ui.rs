@@ -57,9 +57,10 @@ fn egui_test_window(mut ctx: ResMut<EguiContext>) {
 */
 
 fn end_game_lobby(
+    mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
-    winner_query: Query<(&Player, Option<&ThisPlayer>), With<Winner>>,
-    players_query: Query<(&Player, Option<&ThisPlayer>), Without<Winner>>,
+    winner_query: Query<(Entity, &Player, Option<&ThisPlayer>), With<Winner>>,
+    players_query: Query<(Entity, &Player, Option<&ThisPlayer>), Without<Winner>>,
     mut game_state: ResMut<State<GameState>>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
@@ -86,7 +87,7 @@ fn end_game_lobby(
 
             ui.separator();
 
-            if let Ok((winner, this_player)) = winner_query.get_single() {
+            if let Ok((_, winner, this_player)) = winner_query.get_single() {
                 let mut first_label = egui::RichText::new(&winner.username);
                 let mut second_label = egui::RichText::new(winner.score.to_string());
 
@@ -105,9 +106,9 @@ fn end_game_lobby(
 
             let players = players_query
                 .iter()
-                .sorted_by(|(p1, _), (p2, _)| p1.score.cmp(&p2.score));
+                .sorted_by(|(_, p1, _), (_, p2, _)| p1.score.cmp(&p2.score));
 
-            for (player, this_player) in players {
+            for (_, player, this_player) in players {
                 ui.columns(3, |cols| {
                     if this_player.is_some() {
                         cols[0].label(egui::RichText::new(&player.username).strong());
@@ -130,6 +131,14 @@ fn end_game_lobby(
 
                 if ui.button("Back to menu").clicked() {
                     game_state.set(GameState::Lobbies).unwrap();
+
+                    for (entity, ..) in players_query.iter() {
+                        commands.entity(entity).despawn();
+                    }
+
+                    for (entity, ..) in winner_query.iter() {
+                        commands.entity(entity).despawn();
+                    }
                 }
             })
         });
