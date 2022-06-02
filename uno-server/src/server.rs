@@ -118,7 +118,7 @@ impl Server {
                     for client in &mut game.clients {
                         client.player.state = PlayerState::WaitingToPlay;
                     }
-                    new_clients = game.clients;
+                    new_clients = game.clients.clone();
                     false
                 } else {
                     true
