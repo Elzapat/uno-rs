@@ -38,7 +38,7 @@ impl Server {
         let server_addresses = ServerAddrs::new(
             "0.0.0.0:3478".parse().unwrap(),
             "0.0.0.0:3478".parse().unwrap(),
-            "http://82.66.44.38:3478",
+            "http://127.0.0.1:3478",
         );
 
         let mut server = NaiaServer::new(
@@ -85,7 +85,7 @@ impl Server {
                         self.games.retain_mut(|game| {
                             game.clients.retain(|client| client.user_key != user_key);
 
-                            if game.turn_index >= game.clients.len() {
+                            if game.turn_index >= game.clients.len() && !game.clients.is_empty() {
                                 game.pass_turn(&mut self.server, false);
                             }
 

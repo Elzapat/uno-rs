@@ -3,8 +3,8 @@ use super::{
     ColorChosenEvent, CurrentColor, DrawCard, Player, ThisPlayer, Winner,
 };
 use crate::{
+    game::GameExitEvent,
     utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS},
-    GameState,
 };
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
@@ -44,25 +44,11 @@ impl Plugin for GameUiPlugin {
     }
 }
 
-/*
-fn egui_test_window(mut ctx: ResMut<EguiContext>) {
-    egui::Window::new(egui::RichText::new("Test Window").strong())
-        .default_pos(egui::Pos2::new(0.0, 0.0))
-        .fixed_size(egui::Vec2::new(100.0, 200.0))
-        .show(ctx.ctx_mut(), |ui| {
-            ui.painter()
-                .rect_filled(ui.max_rect(), 0.0, egui::Color32::WHITE);
-        });
-}
-*/
-
 fn end_game_lobby(
-    mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
     winner_query: Query<(Entity, &Player, Option<&ThisPlayer>), With<Winner>>,
     players_query: Query<(Entity, &Player, Option<&ThisPlayer>), Without<Winner>>,
-    draw_card_query: Query<Entity, With<DrawCard>>,
-    mut game_state: ResMut<State<GameState>>,
+    // mut game_exit_event: EventWriter<GameExitEvent>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -130,21 +116,7 @@ fn end_game_lobby(
                 //     todo!();
                 // }
 
-                if ui.button("Back to menu").clicked() {
-                    game_state.set(GameState::Lobbies).unwrap();
-
-                    for (entity, ..) in players_query.iter() {
-                        commands.entity(entity).despawn();
-                    }
-
-                    for (entity, ..) in winner_query.iter() {
-                        commands.entity(entity).despawn();
-                    }
-
-                    for entity in draw_card_query.iter() {
-                        commands.entity(entity).despawn();
-                    }
-                }
+                if ui.button("Back to menu").clicked() {}
             })
         });
 }

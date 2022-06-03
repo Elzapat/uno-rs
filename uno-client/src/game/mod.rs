@@ -56,6 +56,7 @@ pub struct PlayedCardValidationEvent(pub bool);
 pub struct GameEndEvent(pub Uuid);
 #[derive(Deref, DerefMut)]
 pub struct ExtraMessageEvent(pub Protocol);
+pub struct GameExitEvent;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
@@ -67,6 +68,7 @@ impl Plugin for GamePlugin {
             .add_event::<PlayedCardValidationEvent>()
             .add_event::<GameEndEvent>()
             .add_event::<ExtraMessageEvent>()
+            .add_event::<GameExitEvent>()
             .add_startup_system(load_assets)
             .add_system(start_game)
             .add_system_set(
@@ -74,7 +76,7 @@ impl Plugin for GamePlugin {
                     .with_run_criteria(run_if_in_game)
                     .with_system(extra_messages)
                     .with_system(execute_packets)
-                    .with_system(to_be_removed),
+                    .with_system(to_be_removed), // .with_system(game_exit),
             )
             .add_system_set_to_stage(
                 CoreStage::PostUpdate,
@@ -297,6 +299,23 @@ fn game_end(
         }
 
         for entity in cards_query.iter() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn game_exit(
+    mut commands: Commands,
+    mut game_exit_event: EventReader<GameExitEvent>,
+    draw_card_query: Query<Entity, With<DrawCard>>,
+    players_query: Query<Entity, With<Player>>,
+) {
+    for _e in game_exit_event.iter() {
+        for entity in players_query.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        for entity in draw_card_query.iter() {
             commands.entity(entity).despawn();
         }
     }
