@@ -3,7 +3,7 @@ use crate::{
     game::Game,
     world::{Entity, World},
 };
-use naia_server::{Event, Server as NaiaServerType, ServerAddrs, ServerConfig, UserKey};
+use naia_server::{Event, RoomKey, Server as NaiaServerType, ServerAddrs, ServerConfig, UserKey};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use uno::{
     lobby::{Lobby, LobbyId},
@@ -58,58 +58,12 @@ impl Server {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(mut self) {
         let room_key = self.server.make_room().key();
         let world = World::default();
 
         loop {
-            for event in self.server.receive() {
-                match event {
-                    Ok(Event::Authorization(user_key, _)) => {
-                        self.server.accept_connection(&user_key);
-                    }
-                    Ok(Event::Connection(user_key)) => {
-                        log::info!(
-                            "Naia Server connected to: {}",
-                            self.server.user(&user_key).address()
-                        );
-                        // self.server.accept_connection(&user_key);
-                        self.server.room_mut(&room_key).add_user(&user_key);
-                        self.clients.push(Client::new(user_key));
-
-                        self.send_lobbies_info(&user_key);
-                    }
-                    Ok(Event::Disconnection(user_key, _)) => {
-                        log::info!("DISCONNECT :(");
-                        self.clients.retain(|c| c.user_key != user_key);
-                        self.games.retain_mut(|game| {
-                            game.clients.retain(|client| client.user_key != user_key);
-
-                            if game.turn_index >= game.clients.len() && !game.clients.is_empty() {
-                                game.pass_turn(&mut self.server, false);
-                            }
-
-                            !game.clients.is_empty()
-                        });
-                    }
-                    Ok(Event::Message(user_key, _, protocol)) => {
-                        if let Some(game_protocol) = self.execute_command(user_key, protocol) {
-                            for game in &mut self.games {
-                                if game.clients.iter().any(|c| c.user_key == user_key)
-                                    && game.execute_commands(
-                                        &mut self.server,
-                                        user_key,
-                                        game_protocol.clone(),
-                                    )
-                                {
-                                    game.pass_turn(&mut self.server, false);
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
+            self.read_server_events(&room_key);
 
             let mut new_clients = Vec::new();
             self.games.retain_mut(|game| {
@@ -297,6 +251,56 @@ impl Server {
         for lobby in &self.lobbies {
             self.server
                 .send_message(&user_key, Channels::Uno, &protocol::LobbyInfo::new(lobby));
+        }
+    }
+
+    fn read_server_events(&mut self, room_key: &RoomKey) {
+        for event in self.server.receive() {
+            match event {
+                Ok(Event::Authorization(user_key, _)) => {
+                    self.server.accept_connection(&user_key);
+                }
+                Ok(Event::Connection(user_key)) => {
+                    log::info!(
+                        "Naia Server connected to: {}",
+                        self.server.user(&user_key).address()
+                    );
+                    // self.server.accept_connection(&user_key);
+                    self.server.room_mut(room_key).add_user(&user_key);
+                    self.clients.push(Client::new(user_key));
+
+                    self.send_lobbies_info(&user_key);
+                }
+                Ok(Event::Disconnection(user_key, _)) => {
+                    log::info!("DISCONNECT :(");
+                    self.clients.retain(|c| c.user_key != user_key);
+                    self.games.retain_mut(|game| {
+                        game.clients.retain(|client| client.user_key != user_key);
+
+                        if game.turn_index >= game.clients.len() && !game.clients.is_empty() {
+                            game.pass_turn(&mut self.server, false);
+                        }
+
+                        !game.clients.is_empty()
+                    });
+                }
+                Ok(Event::Message(user_key, _, protocol)) => {
+                    if let Some(game_protocol) = self.execute_command(user_key, protocol) {
+                        for game in &mut self.games {
+                            if game.clients.iter().any(|c| c.user_key == user_key)
+                                && game.execute_commands(
+                                    &mut self.server,
+                                    user_key,
+                                    game_protocol.clone(),
+                                )
+                            {
+                                game.pass_turn(&mut self.server, false);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }

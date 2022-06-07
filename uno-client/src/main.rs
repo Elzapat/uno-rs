@@ -65,9 +65,7 @@ fn main() {
     });
 
     #[cfg(target_arch = "wasm32")]
-    {
-        app.add_plugin(bevy_web_resizer::Plugin);
-    }
+    app.add_plugin(bevy_web_resizer::Plugin);
 
     app.run();
 }
