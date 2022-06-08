@@ -1,4 +1,5 @@
 use crate::card::{Card, Color};
+use bevy_ecs::prelude::Component;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PlayerState {
@@ -15,7 +16,7 @@ pub enum PlayerState {
 }
 
 /// Structure to define a Uno player
-#[derive(Clone, Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct Player {
     pub hand: Vec<Card>,
     pub score: u32,

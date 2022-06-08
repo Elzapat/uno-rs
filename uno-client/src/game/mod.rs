@@ -185,32 +185,34 @@ fn execute_packets(
             Protocol::CardValidation(validation) => {
                 played_card_validation_event.send(PlayedCardValidationEvent(*validation.valid));
             }
-            Protocol::PassTurn(playing_player) => {
-                let uuid = Uuid::parse_str(&*playing_player.playing_id).unwrap();
+            /*
+                    Protocol::PassTurn(playing_player) => {
+                        let uuid = Uuid::parse_str(&*playing_player.playing_id).unwrap();
 
-                for (_, mut player) in players_query.iter_mut() {
-                    player.is_playing = player.id == uuid;
-                }
-            }
-            Protocol::YourPlayerId(id) => {
-                let uuid = Uuid::parse_str(&*id.player_id).unwrap();
-                for (entity, player) in players_query.iter() {
-                    if player.id == uuid {
-                        commands.entity(entity).insert(ThisPlayer);
-                        break;
+                        for (_, mut player) in players_query.iter_mut() {
+                            player.is_playing = player.id == uuid;
+                        }
                     }
-                }
-            }
-            Protocol::HandSize(hand) => {
-                let uuid = Uuid::parse_str(&*hand.player_id).unwrap();
+                    Protocol::YourPlayerId(id) => {
+                        let uuid = Uuid::parse_str(&*id.player_id).unwrap();
+                        for (entity, player) in players_query.iter() {
+                            if player.id == uuid {
+                                commands.entity(entity).insert(ThisPlayer);
+                                break;
+                            }
+                        }
+                    }
+                    Protocol::HandSize(hand) => {
+                        let uuid = Uuid::parse_str(&*hand.player_id).unwrap();
 
-                for (_, mut player) in players_query.iter_mut() {
-                    if player.id == uuid {
-                        player.hand = vec![Card::back(); *hand.size as usize];
-                        break;
+                        for (_, mut player) in players_query.iter_mut() {
+                            if player.id == uuid {
+                                player.hand = vec![Card::back(); *hand.size as usize];
+                                break;
+                            }
+                        }
                     }
-                }
-            }
+            */
             Protocol::HaveToDrawCard(_) => {
                 commands.spawn().insert(DrawCard);
             }
@@ -230,6 +232,7 @@ fn execute_packets(
                     commands.entity(entity).despawn();
                 }
             }
+            /*
             Protocol::PlayerScore(score) => {
                 let uuid = Uuid::parse_str(&*score.player_id).unwrap();
 
@@ -260,6 +263,7 @@ fn execute_packets(
                     players,
                 });
             }
+            */
             _ => {}
         }
     }
@@ -292,10 +296,12 @@ fn game_end(
         }
 
         for (entity, player) in players_query.iter() {
+            /*
             if &player.id == winner_uuid {
                 commands.entity(entity).insert(Winner);
                 break;
             }
+            */
         }
 
         for entity in cards_query.iter() {

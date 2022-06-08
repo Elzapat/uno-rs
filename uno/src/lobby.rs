@@ -1,9 +1,10 @@
 use crate::player::Player;
+use bevy_ecs::prelude::Component;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub type LobbyId = u32;
 
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct Lobby {
     pub id: LobbyId,
     pub players: Vec<Player>,

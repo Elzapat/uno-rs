@@ -4,11 +4,18 @@ use bevy_ecs::{
     event::{EventReader, EventWriter},
     system::{Commands, ResMut},
 };
+use bevy_log::info;
 use naia_bevy_server::{
     events::{AuthorizationEvent, ConnectionEvent, DisconnectionEvent, MessageEvent},
     Server,
 };
-use uno::network::{protocol::Player, Channels, Protocol};
+use uno::{
+    network::{
+        protocol::{Lobby as NetworkLobby, Player as NetworkPlayer},
+        Channels, Protocol,
+    },
+    Player,
+};
 
 // Lobby sent when the user wants to create a lobby
 pub struct CreateLobbyEvent;
@@ -21,6 +28,7 @@ pub fn authorization_event(
     mut server: Server<Protocol, Channels>,
 ) {
     for AuthorizationEvent(user_key, _) in auth_events.iter() {
+        bevy_log::info!("AUTH!");
         server.accept_connection(user_key);
     }
 }
@@ -32,9 +40,9 @@ pub fn connection_event(
     mut server: Server<Protocol, Channels>,
 ) {
     for ConnectionEvent(user_key) in connection_events.iter() {
-        server.user_mut(&user_key).enter_room(&global.main_room_key);
-        commands.spawn();
-        server.spawn().insert(Player::new("test".to_owned(), 12));
+        bevy_log::info!("connection");
+        server.user_mut(user_key).enter_room(&global.main_room_key);
+        commands.spawn().insert(Player::default());
     }
 }
 
@@ -49,8 +57,10 @@ pub fn message_event(
     mut create_lobby_event: EventWriter<CreateLobbyEvent>,
 ) {
     for MessageEvent(user_key, channels, protocol) in message_events.iter() {
+        info!("received message");
         match protocol {
             Protocol::CreateLobby(_) => create_lobby_event.send(CreateLobbyEvent),
+            Protocol::Username(_) => info!("in username"),
             _ => todo!(),
         }
     }

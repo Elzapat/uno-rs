@@ -1,4 +1,4 @@
-use naia_shared::{derive_channels, Channel, ChannelDirection, ChannelMode, ReliableSettings};
+use naia_shared::{derive_channels, Channel, ChannelDirection, ChannelMode, TickBufferSettings};
 
 #[derive_channels]
 pub enum Channels {
@@ -23,6 +23,6 @@ pub const CHANNEL_CONFIG: &[Channel<Channels>] = &[
     Channel {
         index: Channels::Uno,
         direction: ChannelDirection::Bidirectional,
-        mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+        mode: ChannelMode::TickBuffered(TickBufferSettings::default()),
     },
 ];

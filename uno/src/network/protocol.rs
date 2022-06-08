@@ -10,11 +10,12 @@ mod error;
 mod game_end;
 mod hand_size;
 mod have_to_draw_card;
-mod player;
-// mod join_lobby;
+mod join_lobby;
 mod leave_lobby;
+mod lobby;
 mod lobby_created;
 mod lobby_destroyed;
+mod player;
 // mod lobby_info;
 mod pass_turn;
 mod play_card;
@@ -40,7 +41,7 @@ pub use error::Error;
 pub use game_end::GameEnd;
 pub use hand_size::HandSize;
 pub use have_to_draw_card::HaveToDrawCard;
-// pub use join_lobby::JoinLobby;
+pub use join_lobby::JoinLobby;
 pub use leave_lobby::LeaveLobby;
 pub use lobby_created::LobbyCreated;
 pub use lobby_destroyed::LobbyDestroyed;
@@ -49,6 +50,7 @@ pub use pass_turn::PassTurn;
 pub use play_card::PlayCard;
 // pub use player_joined_lobby::PlayerJoinedLobby;
 // pub use player_left_lobby::PlayerLeftLobby;
+pub use lobby::Lobby;
 pub use player::Player;
 pub use player_score::PlayerScore;
 pub use start_game::StartGame;
@@ -63,10 +65,11 @@ use naia_shared::Protocolize;
 #[derive(Protocolize)]
 pub enum Protocol {
     Player(Player),
+    Lobby(Lobby),
     CreateLobby(CreateLobby),
     LobbyCreated(LobbyCreated),
     LobbyDestroyed(LobbyDestroyed),
-    // JoinLobby(JoinLobby),
+    JoinLobby(JoinLobby),
     LeaveLobby(LeaveLobby),
     // PlayerJoinedLobby(PlayerJoinedLobby),
     // PlayerLeftLobby(PlayerLeftLobby),

@@ -37,33 +37,35 @@ pub fn execute_packets(
                     lobbies.clear();
                 }
             }
-            Protocol::JoinLobby(lobby) => {
-                lobby_state
-                    .set(LobbyState::InLobby(*lobby.lobby_id))
-                    .unwrap();
-            }
-            Protocol::PlayerJoinedLobby(joined_lobby) => {
-                for lobby in lobbies.iter_mut() {
-                    if lobby.id == *joined_lobby.lobby_id {
-                        lobby.players.push(Player::new(
-                            Uuid::parse_str(&*joined_lobby.player_id).unwrap(),
-                            (*joined_lobby.player_name).clone(),
-                        ));
+            /*
+                Protocol::JoinLobby(lobby) => {
+                    lobby_state
+                        .set(LobbyState::InLobby(*lobby.lobby_id))
+                        .unwrap();
+                }
+                Protocol::PlayerJoinedLobby(joined_lobby) => {
+                    for lobby in lobbies.iter_mut() {
+                        if lobby.id == *joined_lobby.lobby_id {
+                            lobby.players.push(Player::new(
+                                Uuid::parse_str(&*joined_lobby.player_id).unwrap(),
+                                (*joined_lobby.player_name).clone(),
+                            ));
+                        }
                     }
                 }
-            }
-            Protocol::LeaveLobby(_) => {
-                lobby_state.set(LobbyState::LobbiesList).unwrap();
-            }
-            Protocol::PlayerLeftLobby(left_lobby) => {
-                for lobby in lobbies.iter_mut() {
-                    if lobby.id == *left_lobby.lobby_id {
-                        lobby
-                            .players
-                            .retain(|p| p.id != Uuid::parse_str(&*left_lobby.player_id).unwrap());
+                Protocol::LeaveLobby(_) => {
+                    lobby_state.set(LobbyState::LobbiesList).unwrap();
+                }
+                Protocol::PlayerLeftLobby(left_lobby) => {
+                    for lobby in lobbies.iter_mut() {
+                        if lobby.id == *left_lobby.lobby_id {
+                            lobby
+                                .players
+                                .retain(|p| p.id != Uuid::parse_str(&*left_lobby.player_id).unwrap());
+                        }
                     }
                 }
-            }
+            */
             Protocol::LobbyCreated(lobby) => {
                 lobbies.push(Lobby {
                     id: *lobby.lobby_id,
@@ -76,25 +78,27 @@ pub fn execute_packets(
                     lobbies.0.remove(idx);
                 }
             }
-            Protocol::LobbyInfo(lobby) => {
-                let players = lobby
-                    .players
-                    .iter()
-                    .map(|(id, name)| Player::new(Uuid::parse_str(id).unwrap(), name.clone()))
-                    .collect();
+            /*
+                    Protocol::LobbyInfo(lobby) => {
+                        let players = lobby
+                            .players
+                            .iter()
+                            .map(|(id, name)| Player::new(Uuid::parse_str(id).unwrap(), name.clone()))
+                            .collect();
 
-                for existing_lobby in lobbies.iter_mut() {
-                    if existing_lobby.id == *lobby.lobby_id {
-                        existing_lobby.players = players;
-                        return;
+                        for existing_lobby in lobbies.iter_mut() {
+                            if existing_lobby.id == *lobby.lobby_id {
+                                existing_lobby.players = players;
+                                return;
+                            }
+                        }
+
+                        lobbies.push(Lobby {
+                            id: *lobby.lobby_id,
+                            players,
+                        });
                     }
-                }
-
-                lobbies.push(Lobby {
-                    id: *lobby.lobby_id,
-                    players,
-                });
-            }
+            */
             Protocol::Error(error) => {
                 commands.spawn().insert(Error {
                     message: (*error.error).clone(),

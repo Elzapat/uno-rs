@@ -3,7 +3,10 @@ use crate::{utils::errors::Error, Settings};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use naia_bevy_client::Client;
-use uno::network::{protocol, Channels, Protocol};
+use uno::network::{
+    protocol::{self, Lobby},
+    Channels, Protocol,
+};
 
 pub fn settings_panel(
     mut commands: Commands,
@@ -48,6 +51,7 @@ pub fn lobby_panel(
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies: Res<LobbiesList>,
+    lobbies_query: Query<&Lobby>,
 ) {
     let window = egui::Window::new("Uno")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -65,10 +69,10 @@ pub fn lobby_panel(
                 .max_height(400.0)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
-                        for lobby in lobbies.iter() {
+                        for lobby in lobbies_query.iter() {
                             ui.add_space(10.0);
                             ui.group(|ui| {
-                                ui.heading(format!("Lobby #{}", lobby.id));
+                                ui.heading(format!("Lobby #{}", *lobby.id));
                                 ui.separator();
                                 ui.horizontal(|ui| {
                                     ui.label(format!("{}/10", lobby.players.len()));
@@ -80,10 +84,12 @@ pub fn lobby_panel(
                                                         .to_owned(),
                                             });
                                         } else {
+                                            /*
                                             client.send_message(
                                                 Channels::Uno,
                                                 &protocol::JoinLobby::new(lobby.id, Vec::new()),
                                             );
+                                            */
                                         }
                                     }
                                 });
