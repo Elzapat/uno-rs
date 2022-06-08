@@ -10,15 +10,16 @@ mod error;
 mod game_end;
 mod hand_size;
 mod have_to_draw_card;
-mod join_lobby;
+mod player;
+// mod join_lobby;
 mod leave_lobby;
 mod lobby_created;
 mod lobby_destroyed;
-mod lobby_info;
+// mod lobby_info;
 mod pass_turn;
 mod play_card;
-mod player_joined_lobby;
-mod player_left_lobby;
+// mod player_joined_lobby;
+// mod player_left_lobby;
 mod player_score;
 mod start_game;
 mod stop_counter_uno;
@@ -39,15 +40,16 @@ pub use error::Error;
 pub use game_end::GameEnd;
 pub use hand_size::HandSize;
 pub use have_to_draw_card::HaveToDrawCard;
-pub use join_lobby::JoinLobby;
+// pub use join_lobby::JoinLobby;
 pub use leave_lobby::LeaveLobby;
 pub use lobby_created::LobbyCreated;
 pub use lobby_destroyed::LobbyDestroyed;
-pub use lobby_info::LobbyInfo;
+// pub use lobby_info::LobbyInfo;
 pub use pass_turn::PassTurn;
 pub use play_card::PlayCard;
-pub use player_joined_lobby::PlayerJoinedLobby;
-pub use player_left_lobby::PlayerLeftLobby;
+// pub use player_joined_lobby::PlayerJoinedLobby;
+// pub use player_left_lobby::PlayerLeftLobby;
+pub use player::Player;
 pub use player_score::PlayerScore;
 pub use start_game::StartGame;
 pub use stop_counter_uno::StopCounterUno;
@@ -60,14 +62,15 @@ use naia_shared::Protocolize;
 
 #[derive(Protocolize)]
 pub enum Protocol {
+    Player(Player),
     CreateLobby(CreateLobby),
     LobbyCreated(LobbyCreated),
     LobbyDestroyed(LobbyDestroyed),
-    JoinLobby(JoinLobby),
+    // JoinLobby(JoinLobby),
     LeaveLobby(LeaveLobby),
-    PlayerJoinedLobby(PlayerJoinedLobby),
-    PlayerLeftLobby(PlayerLeftLobby),
-    LobbyInfo(LobbyInfo),
+    // PlayerJoinedLobby(PlayerJoinedLobby),
+    // PlayerLeftLobby(PlayerLeftLobby),
+    // LobbyInfo(LobbyInfo),
     Username(Username),
     StartGame(StartGame),
     GameEnd(GameEnd),
