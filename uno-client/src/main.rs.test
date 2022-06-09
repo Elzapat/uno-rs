@@ -1,0 +1,55 @@
+use bevy::prelude::*;
+use naia_bevy_client::{
+    events::{InsertComponentEvent, MessageEvent, SpawnEntityEvent, UpdateComponentEvent},
+    shared::{sequence_greater_than, Tick},
+    CommandsExt,
+};
+use naia_bevy_client::{Client, ClientConfig, Plugin as ClientPlugin};
+use uno::network::{
+    protocol::{Lobby as NetworkLobby, ProtocolKind},
+    shared_config, Channels, Protocol,
+};
+
+fn main() {
+    App::default()
+        // Plugins
+        .add_plugins(DefaultPlugins)
+        .add_plugin(ClientPlugin::<Protocol, Channels>::new(
+            ClientConfig::default(),
+            shared_config(),
+        ))
+        // Startup System
+        .add_startup_system(init)
+        .add_system(lobby_test)
+        .add_system(spawn_entity_event)
+        .add_system(insert_component_event)
+        // Realtime Gameplay Loop
+        // Run App
+        .run();
+}
+
+pub fn init(mut commands: Commands, mut client: Client<Protocol, Channels>) {
+    client.auth(uno::network::protocol::Uno::new());
+    client.connect("http://127.0.0.1:3478");
+}
+
+pub fn lobby_test(query: Query<&NetworkLobby>) {
+    for lobby in query.iter() {
+        println!("here");
+    }
+}
+
+pub fn spawn_entity_event(mut event_reader: EventReader<SpawnEntityEvent>) {
+    for event in event_reader.iter() {
+        info!("in spawn entity event!!!");
+    }
+}
+
+pub fn insert_component_event(
+    mut event_reader: EventReader<InsertComponentEvent<ProtocolKind>>,
+    mut local: Commands,
+) {
+    for event in event_reader.iter() {
+        info!("in insert component event")
+    }
+}
