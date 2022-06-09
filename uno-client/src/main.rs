@@ -58,7 +58,6 @@ fn main() {
     .add_plugin(game::GamePlugin)
     .add_startup_system(setup)
     .add_system(utils::errors::display_error)
-    .add_system_to_stage(Stage::Tick, tick)
     // .add_system(animate_sprite_system)
     .insert_resource(Settings {
         username: String::from(""),
@@ -75,8 +74,4 @@ fn setup(mut commands: Commands, mut client: Client<Protocol, Channels>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     client.auth(uno::network::protocol::Uno::new());
     client.connect("http://127.0.0.1:3478");
-}
-
-fn tick() {
-    println!("tick");
 }

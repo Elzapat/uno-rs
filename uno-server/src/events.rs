@@ -1,9 +1,9 @@
-use crate::Global;
-use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{
-    event::{EventReader, EventWriter},
-    system::{Commands, ResMut},
+use crate::{
+    lobbies::{CreateLobbyEvent, JoinLobbyEvent, LeaveLobbyEvent},
+    server::UserKeyComponent,
+    Global,
 };
+use bevy_ecs::prelude::*;
 use bevy_log::info;
 use naia_bevy_server::{
     events::{AuthorizationEvent, ConnectionEvent, DisconnectionEvent, MessageEvent},
@@ -17,18 +17,11 @@ use uno::{
     Player,
 };
 
-// Lobby sent when the user wants to create a lobby
-pub struct CreateLobbyEvent;
-// Event to ask the server to send a message
-#[derive(Deref, DerefMut)]
-pub struct SendMessageEvent(pub Protocol);
-
 pub fn authorization_event(
     mut auth_events: EventReader<AuthorizationEvent<Protocol>>,
     mut server: Server<Protocol, Channels>,
 ) {
     for AuthorizationEvent(user_key, _) in auth_events.iter() {
-        bevy_log::info!("AUTH!");
         server.accept_connection(user_key);
     }
 }
@@ -40,9 +33,21 @@ pub fn connection_event(
     mut server: Server<Protocol, Channels>,
 ) {
     for ConnectionEvent(user_key) in connection_events.iter() {
-        bevy_log::info!("connection");
-        server.user_mut(user_key).enter_room(&global.main_room_key);
-        commands.spawn().insert(Player::default());
+        info!("New connection");
+
+        commands
+            .spawn()
+            .insert(Player::default())
+            .insert(UserKeyComponent(*user_key));
+
+        let player_entity = server.user_mut(user_key).enter_room(&global.main_room_key);
+        let id = server
+            .spawn()
+            .enter_room(&global.main_room_key)
+            .insert(NetworkPlayer::new("Unknown Player".to_owned(), 0))
+            .id();
+
+        global.user_keys_entities.insert(*user_key, id);
     }
 }
 
@@ -55,11 +60,16 @@ pub fn message_event(
     mut global: ResMut<Global>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
     mut create_lobby_event: EventWriter<CreateLobbyEvent>,
+    mut join_lobby_event: EventWriter<JoinLobbyEvent>,
 ) {
-    for MessageEvent(user_key, channels, protocol) in message_events.iter() {
+    for MessageEvent(user_key, channel, protocol) in message_events.iter() {
         info!("received message");
         match protocol {
             Protocol::CreateLobby(_) => create_lobby_event.send(CreateLobbyEvent),
+            Protocol::JoinLobby(lobby) => join_lobby_event.send(JoinLobbyEvent {
+                lobby_id: *lobby.id,
+                user_key: *user_key,
+            }),
             Protocol::Username(_) => info!("in username"),
             _ => todo!(),
         }

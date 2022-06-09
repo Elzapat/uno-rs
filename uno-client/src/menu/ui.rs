@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use naia_bevy_client::Client;
 use uno::network::{
-    protocol::{self, Lobby},
+    protocol::{self, Lobby, Player},
     Channels, Protocol,
 };
 
@@ -50,8 +50,8 @@ pub fn lobby_panel(
     mut egui_context: ResMut<EguiContext>,
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
-    lobbies: Res<LobbiesList>,
     lobbies_query: Query<&Lobby>,
+    players_query: Query<&Player>,
 ) {
     let window = egui::Window::new("Uno")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -84,12 +84,10 @@ pub fn lobby_panel(
                                                         .to_owned(),
                                             });
                                         } else {
-                                            /*
                                             client.send_message(
                                                 Channels::Uno,
-                                                &protocol::JoinLobby::new(lobby.id, Vec::new()),
+                                                &protocol::JoinLobby::new(*lobby.id),
                                             );
-                                            */
                                         }
                                     }
                                 });
@@ -107,26 +105,14 @@ pub fn lobby_panel(
             });
         }),
         LobbyState::InLobby(lobby_id) => window.show(egui_context.ctx_mut(), |ui| {
-            let mut current_lobby = None;
-            for lobby in lobbies.iter() {
-                if lobby.id == *lobby_id {
-                    current_lobby = Some(lobby);
-                    break;
-                }
-            }
-            if current_lobby.is_none() {
-                return;
-            }
-            let current_lobby = current_lobby.unwrap();
-
             ui.vertical_centered(|ui| {
-                ui.heading(format!("Lobby #{}", current_lobby.id));
+                ui.heading(format!("Lobby #{}", lobby_id));
             });
 
             ui.separator();
-            for player in &current_lobby.players {
+            for player in players_query.iter() {
                 ui.label(
-                    egui::RichText::new(format!("➡ {}", player.username))
+                    egui::RichText::new(format!("➡ {}", *player.username))
                         .monospace()
                         .heading(),
                 );
@@ -135,8 +121,7 @@ pub fn lobby_panel(
 
             ui.vertical_centered(|ui| {
                 if ui.button("Leave lobby").clicked() {
-                    client
-                        .send_message(Channels::Uno, &protocol::LeaveLobby::new(current_lobby.id));
+                    client.send_message(Channels::Uno, &protocol::LeaveLobby::new(*lobby_id));
                 }
 
                 if ui.button("Start game").clicked() {

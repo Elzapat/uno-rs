@@ -21,6 +21,7 @@ pub fn execute_packets(
     mut extra_message_events: EventWriter<ExtraMessageEvent>,
 ) {
     for MessageEvent(_, protocol) in message_events.iter() {
+        dbg!("received_message");
         match protocol {
             Protocol::StartGame(_) => {
                 if let LobbyState::InLobby(lobby_id) = lobby_state.current() {
@@ -37,12 +38,10 @@ pub fn execute_packets(
                     lobbies.clear();
                 }
             }
+            Protocol::JoinLobby(lobby) => {
+                lobby_state.set(LobbyState::InLobby(*lobby.id)).unwrap();
+            }
             /*
-                Protocol::JoinLobby(lobby) => {
-                    lobby_state
-                        .set(LobbyState::InLobby(*lobby.lobby_id))
-                        .unwrap();
-                }
                 Protocol::PlayerJoinedLobby(joined_lobby) => {
                     for lobby in lobbies.iter_mut() {
                         if lobby.id == *joined_lobby.lobby_id {
