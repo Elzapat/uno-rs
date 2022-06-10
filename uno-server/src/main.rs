@@ -1,4 +1,5 @@
 pub mod events;
+pub mod game;
 pub mod lobbies;
 pub mod server;
 
@@ -29,6 +30,10 @@ fn main() {
             shared_config(),
         ))
         .add_startup_system(server::server_init)
+        // Server
+        .add_event::<server::UsernameChangedEvent>()
+        .add_system_to_stage(Stage::Tick, server::tick)
+        .add_system(server::username_updated)
         // Events
         .add_system_to_stage(Stage::ReceiveEvents, events::authorization_event)
         .add_system_to_stage(Stage::ReceiveEvents, events::connection_event)
@@ -39,7 +44,11 @@ fn main() {
         .add_event::<lobbies::JoinLobbyEvent>()
         .add_event::<lobbies::LeaveLobbyEvent>()
         .add_system(lobbies::create_lobby)
-        // Server
-        .add_system_to_stage(Stage::Tick, server::tick)
+        .add_system(lobbies::join_lobby)
+        .add_system(lobbies::leave_lobby)
+        // Game
+        .add_event::<game::StartGameEvent>()
+        .add_event::<game::CardPlayedEvent>()
+        .add_system(game::setup_game)
         .run();
 }

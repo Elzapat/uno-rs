@@ -1,6 +1,7 @@
 use crate::{
+    game::StartGameEvent,
     lobbies::{CreateLobbyEvent, JoinLobbyEvent, LeaveLobbyEvent},
-    server::UserKeyComponent,
+    server::{UserKeyComponent, UsernameChangedEvent},
     Global,
 };
 use bevy_ecs::prelude::*;
@@ -10,10 +11,7 @@ use naia_bevy_server::{
     Server,
 };
 use uno::{
-    network::{
-        protocol::{Lobby as NetworkLobby, Player as NetworkPlayer},
-        Channels, Protocol,
-    },
+    network::{protocol::Player as NetworkPlayer, Channels, Protocol},
     Player,
 };
 
@@ -40,11 +38,12 @@ pub fn connection_event(
             .insert(Player::default())
             .insert(UserKeyComponent(*user_key));
 
-        let player_entity = server.user_mut(user_key).enter_room(&global.main_room_key);
+        server.user_mut(user_key).enter_room(&global.main_room_key);
+
         let id = server
             .spawn()
             .enter_room(&global.main_room_key)
-            .insert(NetworkPlayer::new("Unknown Player".to_owned(), 0))
+            .insert(NetworkPlayer::new(None, "Unknown Player".to_owned(), 0))
             .id();
 
         global.user_keys_entities.insert(*user_key, id);
@@ -52,17 +51,18 @@ pub fn connection_event(
 }
 
 pub fn disconnection_event(mut disconnection_events: EventReader<DisconnectionEvent>) {
-    for DisconnectionEvent(user_key, _) in disconnection_events.iter() {}
+    for DisconnectionEvent(_user_key, _) in disconnection_events.iter() {}
 }
 
 pub fn message_event(
-    server: Server<Protocol, Channels>,
-    mut global: ResMut<Global>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
     mut create_lobby_event: EventWriter<CreateLobbyEvent>,
     mut join_lobby_event: EventWriter<JoinLobbyEvent>,
+    mut leave_lobby_event: EventWriter<LeaveLobbyEvent>,
+    mut username_change_event: EventWriter<UsernameChangedEvent>,
+    mut start_game_event: EventWriter<StartGameEvent>,
 ) {
-    for MessageEvent(user_key, channel, protocol) in message_events.iter() {
+    for MessageEvent(user_key, _channel, protocol) in message_events.iter() {
         info!("received message");
         match protocol {
             Protocol::CreateLobby(_) => create_lobby_event.send(CreateLobbyEvent),
@@ -70,7 +70,15 @@ pub fn message_event(
                 lobby_id: *lobby.id,
                 user_key: *user_key,
             }),
-            Protocol::Username(_) => info!("in username"),
+            Protocol::LeaveLobby(lobby) => leave_lobby_event.send(LeaveLobbyEvent {
+                lobby_id: *lobby.id,
+                user_key: *user_key,
+            }),
+            Protocol::Username(player) => username_change_event.send(UsernameChangedEvent {
+                username: (*player.username).to_owned(),
+                user_key: *user_key,
+            }),
+            Protocol::StartGame(_) => start_game_event.send(StartGameEvent(0)),
             _ => todo!(),
         }
     }

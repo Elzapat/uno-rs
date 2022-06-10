@@ -12,6 +12,11 @@ use uno::{
     Lobby, Player,
 };
 
+pub struct UsernameChangedEvent {
+    pub user_key: UserKey,
+    pub username: String,
+}
+
 #[derive(Component, Deref, DerefMut, Copy, Clone)]
 pub struct UserKeyComponent(pub UserKey);
 
@@ -34,31 +39,40 @@ pub fn server_init(mut commands: Commands, mut server: Server<Protocol, Channels
 }
 
 pub fn tick(
-    mut global: ResMut<Global>,
+    global: Res<Global>,
     mut server: Server<Protocol, Channels>,
-    lobbies_query: Query<&Lobby>,
-    players_query: Query<Option<&InLobby>, With<Player>>,
+    players_query: Query<(&UserKeyComponent, &Player)>,
+    mut network_players_query: Query<(Entity, &mut NetworkPlayer)>,
 ) {
     // info!("tick");
 
-    for (room_key, user_key, entity) in server.scope_checks() {
-        if server.entity(&entity).has_component::<NetworkLobby>() {
-            server.user_scope(&user_key).include(&entity);
-        } else if server.entity(&entity).has_component::<NetworkPlayer>() {
-            for (lobby_id, other_room_key) in global.lobbies_room_key.iter() {
-                if room_key == *other_room_key {
-                    for other_lobby_id in players_query.iter().flatten() {
-                        if **other_lobby_id == *lobby_id {
-                            server.user_scope(&user_key).include(&entity);
-                        }
-                    }
-                    break;
-                }
+    // Sync player number of cards and username with clients
+    for (user_key, player) in players_query.iter() {
+        for (entity, mut network_player) in network_players_query.iter_mut() {
+            if entity == global.user_keys_entities[user_key] {
+                *network_player.username = player.username.clone();
+                *network_player.hand_size = player.hand.len();
             }
         }
-        // println!("{entity:?}");
-        // server.user_scope(&user_key).include(&entity);
+    }
+
+    for (_room_key, user_key, entity) in server.scope_checks() {
+        server.user_scope(&user_key).include(&entity);
     }
 
     server.send_all_updates();
+}
+
+pub fn username_updated(
+    mut username_changed_events: EventReader<UsernameChangedEvent>,
+    mut players_query: Query<(&UserKeyComponent, &mut Player)>,
+) {
+    for UsernameChangedEvent { user_key, username } in username_changed_events.iter() {
+        for (player_user_key, mut player) in players_query.iter_mut() {
+            if **player_user_key == *user_key {
+                player.username = username.clone();
+                break;
+            }
+        }
+    }
 }

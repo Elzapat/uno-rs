@@ -41,30 +41,9 @@ pub fn execute_packets(
             Protocol::JoinLobby(lobby) => {
                 lobby_state.set(LobbyState::InLobby(*lobby.id)).unwrap();
             }
-            /*
-                Protocol::PlayerJoinedLobby(joined_lobby) => {
-                    for lobby in lobbies.iter_mut() {
-                        if lobby.id == *joined_lobby.lobby_id {
-                            lobby.players.push(Player::new(
-                                Uuid::parse_str(&*joined_lobby.player_id).unwrap(),
-                                (*joined_lobby.player_name).clone(),
-                            ));
-                        }
-                    }
-                }
-                Protocol::LeaveLobby(_) => {
-                    lobby_state.set(LobbyState::LobbiesList).unwrap();
-                }
-                Protocol::PlayerLeftLobby(left_lobby) => {
-                    for lobby in lobbies.iter_mut() {
-                        if lobby.id == *left_lobby.lobby_id {
-                            lobby
-                                .players
-                                .retain(|p| p.id != Uuid::parse_str(&*left_lobby.player_id).unwrap());
-                        }
-                    }
-                }
-            */
+            Protocol::LeaveLobby(_) => {
+                lobby_state.set(LobbyState::LobbiesList).unwrap();
+            }
             Protocol::LobbyCreated(lobby) => {
                 lobbies.push(Lobby {
                     id: *lobby.lobby_id,

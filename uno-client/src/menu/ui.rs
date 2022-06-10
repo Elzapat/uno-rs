@@ -75,7 +75,7 @@ pub fn lobby_panel(
                                 ui.heading(format!("Lobby #{}", *lobby.id));
                                 ui.separator();
                                 ui.horizontal(|ui| {
-                                    ui.label(format!("{}/10", lobby.players.len()));
+                                    ui.label(format!("{}/10", *lobby.number_of_players));
                                     if ui.button("Join Lobby").clicked() {
                                         if settings.username.trim().is_empty() {
                                             commands.spawn().insert(Error {

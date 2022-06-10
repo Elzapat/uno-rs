@@ -1,6 +1,4 @@
-use naia_shared::{
-    derive_channels, Channel, ChannelDirection, ChannelMode, ReliableSettings, TickBufferSettings,
-};
+use naia_shared::{derive_channels, Channel, ChannelDirection, ChannelMode, ReliableSettings};
 
 #[derive_channels]
 pub enum Channels {

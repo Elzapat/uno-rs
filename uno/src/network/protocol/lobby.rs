@@ -6,11 +6,11 @@ use naia_shared::{Property, Replicate};
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct Lobby {
     pub id: Property<LobbyId>,
-    pub players: Property<Vec<String>>,
+    pub number_of_players: Property<usize>,
 }
 
 impl Lobby {
-    pub fn new(id: LobbyId, players: Vec<String>) -> Self {
-        Lobby::new_complete(id, players)
+    pub fn new(id: LobbyId, number_of_players: usize) -> Self {
+        Lobby::new_complete(id, number_of_players)
     }
 }
