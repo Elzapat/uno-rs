@@ -106,8 +106,8 @@ fn start_game(
     mut game_state: ResMut<State<GameState>>,
     mut start_game_event: EventReader<StartGameEvent>,
 ) {
-    #[allow(clippy::never_loop)]
     for StartGameEvent(clients) in start_game_event.iter() {
+        println!("start game event!!");
         for client in clients.iter() {
             let mut client = client.clone();
             client.hand = vec![Card::back(); 7];
@@ -117,7 +117,6 @@ fn start_game(
         if game_state.current() != &GameState::Game {
             game_state.set(GameState::Game).unwrap();
         }
-        break;
     }
 }
 

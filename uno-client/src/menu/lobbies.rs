@@ -24,6 +24,7 @@ pub fn execute_packets(
         dbg!("received_message");
         match protocol {
             Protocol::StartGame(_) => {
+                println!("in start game");
                 if let LobbyState::InLobby(lobby_id) = lobby_state.current() {
                     for lobby in lobbies.iter() {
                         if lobby.id == *lobby_id {

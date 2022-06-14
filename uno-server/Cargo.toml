@@ -10,6 +10,7 @@ uuid = { version = "1.0", features = ["v4"] }
 uno = { path = "../uno" }
 naia-bevy-server = { version = "0.10", features = ["use-udp"] }
 naia-shared = "0.10"
+rand = "0.8"
 bevy_app = { version = "0.7", default-features = false }
 bevy_ecs = { version = "0.7", default-features = false }
 bevy_log = { version = "0.7", default-features = false }

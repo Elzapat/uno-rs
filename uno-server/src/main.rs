@@ -7,6 +7,7 @@ use bevy_app::{App, ScheduleRunnerPlugin};
 use bevy_core::CorePlugin;
 use bevy_ecs::entity::Entity;
 use bevy_log::LogPlugin;
+use game::Games;
 use naia_bevy_server::{Plugin as ServerPlugin, RoomKey, ServerConfig, Stage, UserKey};
 use std::collections::HashMap;
 use uno::{
@@ -47,8 +48,13 @@ fn main() {
         .add_system(lobbies::join_lobby)
         .add_system(lobbies::leave_lobby)
         // Game
+        .insert_resource(game::Games(HashMap::new()))
+        .add_event::<game::PassTurnEvent>()
         .add_event::<game::StartGameEvent>()
         .add_event::<game::CardPlayedEvent>()
+        .add_event::<game::DrawCardEvent>()
         .add_system(game::setup_game)
+        .add_system(game::draw_card)
+        .add_system(game::pass_turn)
         .run();
 }
