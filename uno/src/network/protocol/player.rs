@@ -8,10 +8,12 @@ pub struct Player {
     pub in_lobby: Property<Option<LobbyId>>,
     pub username: Property<String>,
     pub hand_size: Property<usize>,
+    pub score: Property<u32>,
+    pub is_playing: Property<bool>,
 }
 
 impl Player {
     pub fn new(in_lobby: Option<LobbyId>, username: String, hand_size: usize) -> Self {
-        Player::new_complete(in_lobby, username, hand_size)
+        Player::new_complete(in_lobby, username, hand_size, 0, false)
     }
 }

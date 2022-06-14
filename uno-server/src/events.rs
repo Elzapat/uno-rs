@@ -1,5 +1,5 @@
 use crate::{
-    game::StartGameEvent,
+    game::{CardPlayedEvent, StartGameEvent},
     lobbies::{CreateLobbyEvent, JoinLobbyEvent, LeaveLobbyEvent},
     server::{UserKeyComponent, UsernameChangedEvent},
     Global,
@@ -11,7 +11,10 @@ use naia_bevy_server::{
     Server,
 };
 use uno::{
-    network::{protocol::Player as NetworkPlayer, Channels, Protocol},
+    network::{
+        protocol::{Player as NetworkPlayer, *},
+        Channels, Protocol,
+    },
     Player,
 };
 
@@ -51,7 +54,9 @@ pub fn connection_event(
 }
 
 pub fn disconnection_event(mut disconnection_events: EventReader<DisconnectionEvent>) {
-    for DisconnectionEvent(_user_key, _) in disconnection_events.iter() {}
+    for DisconnectionEvent(_user_key, _) in disconnection_events.iter() {
+        info!("A user disconnected");
+    }
 }
 
 pub fn message_event(
@@ -61,6 +66,7 @@ pub fn message_event(
     mut leave_lobby_event: EventWriter<LeaveLobbyEvent>,
     mut username_change_event: EventWriter<UsernameChangedEvent>,
     mut start_game_event: EventWriter<StartGameEvent>,
+    mut card_validation_event: EventWriter<CardPlayedEvent>,
 ) {
     for MessageEvent(user_key, _channel, protocol) in message_events.iter() {
         info!("received message");
@@ -79,6 +85,13 @@ pub fn message_event(
                 user_key: *user_key,
             }),
             Protocol::StartGame(_) => start_game_event.send(StartGameEvent(0)),
+            Protocol::CardPlayed(CardPlayed { color, value }) => {
+                card_validation_event.send(CardPlayedEvent {
+                    user_key: *user_key,
+                    game_id: *lobby.id,
+                    card: (*color, *value).into(),
+                })
+            }
             _ => todo!(),
         }
     }

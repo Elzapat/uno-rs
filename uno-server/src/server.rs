@@ -46,12 +46,14 @@ pub fn tick(
 ) {
     // info!("tick");
 
-    // Sync player number of cards and username with clients
+    // Sync player number of cards, username, score, and if player is playing with clients
     for (user_key, player) in players_query.iter() {
         for (entity, mut network_player) in network_players_query.iter_mut() {
             if entity == global.user_keys_entities[user_key] {
                 *network_player.username = player.username.clone();
                 *network_player.hand_size = player.hand.len();
+                *network_player.score = player.score;
+                *network_player.is_playing = player.is_playing;
             }
         }
     }

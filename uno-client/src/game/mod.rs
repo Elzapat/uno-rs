@@ -42,12 +42,9 @@ pub struct Winner;
 pub struct GameAssets {
     cards: Handle<TextureAtlas>,
 }
-#[derive(Deref, DerefMut)]
-pub struct CurrentColor(Color);
 
 // Events
-#[derive(Deref, DerefMut)]
-pub struct StartGameEvent(pub Vec<UnoPlayer>);
+pub struct StartGameEvent;
 #[derive(Deref, DerefMut)]
 pub struct ColorChosenEvent(pub Color);
 #[derive(Deref, DerefMut)]
@@ -62,7 +59,6 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(cards::CardsPlugin)
             .add_plugin(ui::GameUiPlugin)
-            .insert_resource(CurrentColor(Color::Black))
             .add_event::<StartGameEvent>()
             .add_event::<ColorChosenEvent>()
             .add_event::<PlayedCardValidationEvent>()
@@ -106,13 +102,13 @@ fn start_game(
     mut game_state: ResMut<State<GameState>>,
     mut start_game_event: EventReader<StartGameEvent>,
 ) {
-    for StartGameEvent(clients) in start_game_event.iter() {
+    for StartGameEvent in start_game_event.iter() {
         println!("start game event!!");
-        for client in clients.iter() {
-            let mut client = client.clone();
-            client.hand = vec![Card::back(); 7];
-            commands.spawn().insert(Player(client));
-        }
+        // for client in clients.iter() {
+        //     let mut client = client.clone();
+        //     client.hand = vec![Card::back(); 7];
+        //     commands.spawn().insert(Player(client));
+        // }
 
         if game_state.current() != &GameState::Game {
             game_state.set(GameState::Game).unwrap();
@@ -167,7 +163,6 @@ fn execute_packets(
     mut played_card_validation_event: EventWriter<PlayedCardValidationEvent>,
     mut card_played_event: EventWriter<CardPlayedEvent>,
     mut game_end_event: EventWriter<GameEndEvent>,
-    mut current_color: ResMut<CurrentColor>,
     mut lobbies: ResMut<LobbiesList>,
 ) {
     for MessageEvent(_, message) in message_events.iter() {

@@ -21,17 +21,16 @@ pub fn execute_packets(
     mut extra_message_events: EventWriter<ExtraMessageEvent>,
 ) {
     for MessageEvent(_, protocol) in message_events.iter() {
-        dbg!("received_message");
         match protocol {
             Protocol::StartGame(_) => {
                 println!("in start game");
                 if let LobbyState::InLobby(lobby_id) = lobby_state.current() {
-                    for lobby in lobbies.iter() {
-                        if lobby.id == *lobby_id {
-                            start_game_event.send(StartGameEvent(lobby.players.clone()));
-                            break;
-                        }
-                    }
+                    // for lobby in lobbies.iter() {
+                    //     if lobby.id == *lobby_id {
+                    start_game_event.send(StartGameEvent);
+                    break;
+                    //     }
+                    // }
                 }
 
                 if lobby_state.current() != &LobbyState::LobbiesList {
@@ -84,8 +83,9 @@ pub fn execute_packets(
                 });
             }
             protocol => {
+                println!("receiving extra message");
                 extra_message_events.send(ExtraMessageEvent(protocol.clone()));
-                return;
+                // return;
             }
         };
     }

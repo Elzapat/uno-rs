@@ -1,6 +1,6 @@
 use super::{
     run_if_in_end_game_lobby, run_if_in_game, CallCounterUno, CallUno, ChooseColor,
-    ColorChosenEvent, CurrentColor, DrawCard, Player, ThisPlayer, Winner,
+    ColorChosenEvent, DrawCard, ThisPlayer, Winner,
 };
 use crate::{
     game::GameExitEvent,
@@ -13,7 +13,7 @@ use naia_bevy_client::Client;
 use uno::{
     card::{Card, Color},
     network::{
-        protocol::{self, Protocol},
+        protocol::{self, CurrentColor, Player, Protocol},
         Channels,
     },
 };
@@ -75,7 +75,7 @@ fn end_game_lobby(
             ui.separator();
 
             if let Ok((_, winner, this_player)) = winner_query.get_single() {
-                let mut first_label = egui::RichText::new(&winner.username);
+                let mut first_label = egui::RichText::new(&*winner.username);
                 let mut second_label = egui::RichText::new(winner.score.to_string());
 
                 if this_player.is_some() {
@@ -98,10 +98,10 @@ fn end_game_lobby(
             for (_, player, this_player) in players {
                 ui.columns(3, |cols| {
                     if this_player.is_some() {
-                        cols[0].label(egui::RichText::new(&player.username).strong());
+                        cols[0].label(egui::RichText::new(&*player.username).strong());
                         cols[1].label(egui::RichText::new(player.score.to_string()).strong());
                     } else {
-                        cols[0].label(&player.username);
+                        cols[0].label(&*player.username);
                         cols[1].label(player.score.to_string());
                     }
 
@@ -124,23 +124,27 @@ fn end_game_lobby(
 fn players_panel(
     mut egui_context: ResMut<EguiContext>,
     players_query: Query<(&Player, Option<&ThisPlayer>)>,
-    current_color: Res<CurrentColor>,
+    current_color_query: Query<&CurrentColor>,
 ) {
     egui::TopBottomPanel::top("Players").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
             let size = players_query.iter().count();
+            let current_color = match current_color_query.get_single() {
+                Ok(CurrentColor { color }) => (**color).into(),
+                Err(_) => Color::Black,
+            };
 
             ui.columns(size, |cols| {
                 for (col, (player, this_player)) in cols.iter_mut().zip(players_query.iter()) {
                     col.vertical_centered(|ui| {
-                        let mut text = egui::RichText::new(&player.username);
+                        let mut text = egui::RichText::new(&*player.username);
 
                         if this_player.is_some() {
                             text = text.color(egui::Color32::WHITE);
                         }
 
                         ui.label(text);
-                        small_card_count(ui, player, current_color.0);
+                        small_card_count(ui, player, current_color);
                     });
                 }
             });
@@ -265,13 +269,13 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
     const CARD_PADDING: f32 = 2.0;
 
     let size = egui::Vec2::new(
-        (CARD_WIDTH + CARD_PADDING) * player.hand.len() as f32 - CARD_PADDING,
+        (CARD_WIDTH + CARD_PADDING) * *player.hand_size as f32 - CARD_PADDING,
         CARD_HEIGHT,
     );
     let (mut rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     rect.set_width(CARD_WIDTH);
 
-    let card_color = if player.is_playing {
+    let card_color = if *player.is_playing {
         let mut color = egui::Color32::WHITE;
 
         for (uno_color, egui_color) in COLORS {
@@ -286,7 +290,7 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
         egui::Color32::from_gray(200)
     };
 
-    for _ in 0..player.hand.len() {
+    for _ in 0..*player.hand_size {
         ui.painter().rect_filled(rect, 2.0, card_color);
         rect.set_center(rect.center() + egui::Vec2::new(CARD_WIDTH + CARD_PADDING, 0.0));
     }

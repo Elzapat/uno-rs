@@ -1,9 +1,10 @@
+#[allow(clippy::too_many_arguments)]
 pub mod events;
 pub mod game;
 pub mod lobbies;
 pub mod server;
 
-use bevy_app::{App, ScheduleRunnerPlugin};
+use bevy_app::{App, CoreStage, ScheduleRunnerPlugin};
 use bevy_core::CorePlugin;
 use bevy_ecs::entity::Entity;
 use bevy_log::LogPlugin;
@@ -51,9 +52,9 @@ fn main() {
         .insert_resource(game::Games(HashMap::new()))
         .add_event::<game::PassTurnEvent>()
         .add_event::<game::StartGameEvent>()
-        .add_event::<game::CardPlayedEvent>()
         .add_event::<game::DrawCardEvent>()
-        .add_system(game::setup_game)
+        .add_event::<game::CardPlayedEvent>()
+        .add_system_to_stage(CoreStage::PreUpdate, game::setup_game)
         .add_system(game::draw_card)
         .add_system(game::pass_turn)
         .run();
