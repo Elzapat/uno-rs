@@ -1,6 +1,7 @@
 use crate::{lobbies::InLobby, server::UserKeyComponent, Global};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
+use bevy_log::error;
 use naia_bevy_server::{Server, UserKey};
 use rand::Rng;
 use std::{collections::HashMap, default::Default};
@@ -16,19 +17,19 @@ use uno::{
 pub struct InGame(pub LobbyId);
 
 pub struct PassTurnEvent {
-    skipping: bool,
-    game_id: LobbyId,
+    pub skipping: bool,
+    pub game_id: LobbyId,
 }
 #[derive(Deref, DerefMut)]
 pub struct StartGameEvent(pub LobbyId);
 pub struct DrawCardEvent {
-    user_key: UserKey,
-    game_id: LobbyId,
+    pub user_key: UserKey,
+    pub game_id: LobbyId,
 }
 pub struct CardPlayedEvent {
-    user_key: UserKey,
-    game_id: LobbyId,
-    card: Card,
+    pub user_key: UserKey,
+    pub game_id: LobbyId,
+    pub card: Card,
 }
 
 #[derive(Clone)]
@@ -96,6 +97,22 @@ impl Default for GameSettings {
 
 #[derive(Clone, Deref, DerefMut)]
 pub struct Games(pub HashMap<LobbyId, Game>);
+
+fn get_player_from_game<'a, 'b, 'c, 'd>(
+    game: &'b Game,
+    game_id: LobbyId,
+    players_query: &'a mut Query<'a, 'a, (&'_ mut Player, &'_ UserKeyComponent, &'_ InGame)>,
+) -> Option<(Mut<'a, Player>, UserKey)> {
+    for (mut player, user_key, InGame(id)) in players_query.iter_mut() {
+        return if **user_key == game.players[game.turn_index].0 && *id == game_id {
+            Some((player, **user_key))
+        } else {
+            None
+        };
+    }
+
+    None
+}
 
 pub fn setup_game(
     mut commands: Commands,
@@ -183,7 +200,10 @@ pub fn draw_card(
     for DrawCardEvent { user_key, game_id } in draw_card_events.iter() {
         let game = match games.get_mut(game_id) {
             Some(g) => g,
-            None => continue,
+            None => {
+                error!("Game not found in draw_card");
+                continue;
+            }
         };
 
         let card = game.draw_card();
@@ -207,7 +227,10 @@ pub fn pass_turn(
     for PassTurnEvent { skipping, game_id } in pass_turn_events.iter() {
         let game = match games.get_mut(game_id) {
             Some(g) => g,
-            None => continue,
+            None => {
+                error!("Game not found in pass_turn");
+                continue;
+            }
         };
 
         game.turn_index = game.next_player_index();
@@ -237,5 +260,38 @@ pub fn pass_turn(
                 }
             }
         }
+    }
+}
+
+fn card_played(
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut card_played_events: EventReader<CardPlayedEvent>,
+    mut players_query: Query<(&mut Player, &UserKeyComponent, &InGame)>,
+) {
+    for event in card_played_events.iter() {
+        let CardPlayedEvent {
+            user_key,
+            game_id,
+            card,
+        } = event;
+
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in card_played");
+                continue;
+            }
+        };
+
+        let (player, user_key) = match get_player_from_game(game, *game_id, &mut players_query) {
+            Some(p) => p,
+            None => {
+                error!("Player not found in card_played");
+                continue;
+            }
+        };
+
+        // let valid = if
     }
 }

@@ -60,6 +60,8 @@ pub fn disconnection_event(mut disconnection_events: EventReader<DisconnectionEv
 }
 
 pub fn message_event(
+    global: Res<Global>,
+    server: Server<Protocol, Channels>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
     mut create_lobby_event: EventWriter<CreateLobbyEvent>,
     mut join_lobby_event: EventWriter<JoinLobbyEvent>,
@@ -69,7 +71,13 @@ pub fn message_event(
     mut card_validation_event: EventWriter<CardPlayedEvent>,
 ) {
     for MessageEvent(user_key, _channel, protocol) in message_events.iter() {
-        info!("received message");
+        let mut user_lobby = None;
+        for (lobby_id, room_key) in &global.lobbies_room_key {
+            if server.room(room_key).has_user(user_key) {
+                user_lobby = Some(*lobby_id);
+            }
+        }
+
         match protocol {
             Protocol::CreateLobby(_) => create_lobby_event.send(CreateLobbyEvent),
             Protocol::JoinLobby(lobby) => join_lobby_event.send(JoinLobbyEvent {
@@ -88,8 +96,8 @@ pub fn message_event(
             Protocol::CardPlayed(CardPlayed { color, value }) => {
                 card_validation_event.send(CardPlayedEvent {
                     user_key: *user_key,
-                    game_id: *lobby.id,
-                    card: (*color, *value).into(),
+                    game_id: user_lobby.unwrap(),
+                    card: (**color, **value).into(),
                 })
             }
             _ => todo!(),
