@@ -31,6 +31,10 @@ pub struct CardPlayedEvent {
     pub game_id: LobbyId,
     pub card: Card,
 }
+pub struct PlayCardEvent {
+    pub card: Card,
+    pub game_id: LobbyId,
+}
 
 #[derive(Clone)]
 pub struct Game {
@@ -101,7 +105,7 @@ pub struct Games(pub HashMap<LobbyId, Game>);
 fn get_player_from_game<'a, 'b, 'c, 'd>(
     game: &'b Game,
     game_id: LobbyId,
-    players_query: &'a mut Query<'a, 'a, (&'_ mut Player, &'_ UserKeyComponent, &'_ InGame)>,
+    players_query: &'a mut Query<'a, 'd, (&'_ mut Player, &'_ UserKeyComponent, &'_ InGame)>,
 ) -> Option<(Mut<'a, Player>, UserKey)> {
     for (mut player, user_key, InGame(id)) in players_query.iter_mut() {
         return if **user_key == game.players[game.turn_index].0 && *id == game_id {
@@ -268,6 +272,7 @@ fn card_played(
     mut games: ResMut<Games>,
     mut card_played_events: EventReader<CardPlayedEvent>,
     mut players_query: Query<(&mut Player, &UserKeyComponent, &InGame)>,
+    mut play_card_event: EventWriter<PlayCardEvent>,
 ) {
     for event in card_played_events.iter() {
         let CardPlayedEvent {
@@ -284,14 +289,36 @@ fn card_played(
             }
         };
 
-        let (player, user_key) = match get_player_from_game(game, *game_id, &mut players_query) {
-            Some(p) => p,
-            None => {
-                error!("Player not found in card_played");
+        let mut opt = None;
+        for (player, user_key, InGame(id)) in players_query.iter_mut() {
+            if **user_key == game.players[game.turn_index].0 && *id == *game_id {
+                opt = Some(player);
+                break;
+            } else {
                 continue;
             }
+        }
+        let player = match opt {
+            Some(p) => p,
+            None => return,
         };
 
-        // let valid = if
+        let valid = if player.state == PlayerState::PlayingCard {
+            let valid = card.can_be_played(*game.discard.top().unwrap(), game.current_color)
+                && player.hand.contains(card);
+
+            if valid {
+                play_card_event.send(PlayCardEvent {
+                    card: *card,
+                    game_id: *game_id,
+                });
+            }
+
+            valid
+        } else {
+            false
+        };
+
+        server.send_message(user_key, Channels::Uno, &CardValidation::new(valid));
     }
 }

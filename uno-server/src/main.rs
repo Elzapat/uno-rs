@@ -54,6 +54,7 @@ fn main() {
         .add_event::<game::StartGameEvent>()
         .add_event::<game::DrawCardEvent>()
         .add_event::<game::CardPlayedEvent>()
+        .add_event::<game::PlayCardEvent>()
         .add_system_to_stage(CoreStage::PreUpdate, game::setup_game)
         .add_system(game::draw_card)
         .add_system(game::pass_turn)
