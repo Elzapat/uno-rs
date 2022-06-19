@@ -1,11 +1,13 @@
 use crate::{
-    game::{CardPlayedEvent, StartGameEvent},
+    game::{
+        CardPlayedEvent, ColorChosenEvent, CounterUnoEvent, DrawCardEvent, StartGameEvent, UnoEvent,
+    },
     lobbies::{CreateLobbyEvent, JoinLobbyEvent, LeaveLobbyEvent},
     server::{UserKeyComponent, UsernameChangedEvent},
     Global,
 };
 use bevy_ecs::prelude::*;
-use bevy_log::info;
+use bevy_log::{error, info};
 use naia_bevy_server::{
     events::{AuthorizationEvent, ConnectionEvent, DisconnectionEvent, MessageEvent},
     Server,
@@ -69,6 +71,10 @@ pub fn message_event(
     mut username_change_event: EventWriter<UsernameChangedEvent>,
     mut start_game_event: EventWriter<StartGameEvent>,
     mut card_validation_event: EventWriter<CardPlayedEvent>,
+    mut color_chosen_event: EventWriter<ColorChosenEvent>,
+    mut draw_card_event: EventWriter<DrawCardEvent>,
+    mut uno_event: EventWriter<UnoEvent>,
+    mut counter_uno_event: EventWriter<CounterUnoEvent>,
 ) {
     for MessageEvent(user_key, _channel, protocol) in message_events.iter() {
         let mut user_lobby = None;
@@ -100,7 +106,26 @@ pub fn message_event(
                     card: (**color, **value).into(),
                 })
             }
-            _ => todo!(),
+            Protocol::ColorChosen(ColorChosen { color }) => {
+                color_chosen_event.send(ColorChosenEvent {
+                    color: (**color).into(),
+                    game_id: user_lobby.unwrap(),
+                })
+            }
+            Protocol::Uno(_) => uno_event.send(UnoEvent {
+                user_key: *user_key,
+                game_id: user_lobby.unwrap(),
+            }),
+            Protocol::CounterUno(_) => counter_uno_event.send(CounterUnoEvent {
+                user_key: *user_key,
+                game_id: user_lobby.unwrap(),
+            }),
+            Protocol::DrawCard(_) => draw_card_event.send(DrawCardEvent {
+                user_key: *user_key,
+                game_id: user_lobby.unwrap(),
+                player_action: true,
+            }),
+            _ => error!("Received unhandled message!"),
         }
     }
 }

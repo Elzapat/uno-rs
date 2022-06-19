@@ -1,4 +1,6 @@
-#[allow(clippy::too_many_arguments)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+
 pub mod events;
 pub mod game;
 pub mod lobbies;
@@ -8,7 +10,6 @@ use bevy_app::{App, CoreStage, ScheduleRunnerPlugin};
 use bevy_core::CorePlugin;
 use bevy_ecs::entity::Entity;
 use bevy_log::LogPlugin;
-use game::Games;
 use naia_bevy_server::{Plugin as ServerPlugin, RoomKey, ServerConfig, Stage, UserKey};
 use std::collections::HashMap;
 use uno::{
@@ -55,8 +56,18 @@ fn main() {
         .add_event::<game::DrawCardEvent>()
         .add_event::<game::CardPlayedEvent>()
         .add_event::<game::PlayCardEvent>()
+        .add_event::<game::ColorChosenEvent>()
+        .add_event::<game::UnoEvent>()
+        .add_event::<game::CounterUnoEvent>()
+        .add_event::<game::GameEndEvent>()
         .add_system_to_stage(CoreStage::PreUpdate, game::setup_game)
+        .add_system_to_stage(CoreStage::PostUpdate, game::pass_turn)
         .add_system(game::draw_card)
-        .add_system(game::pass_turn)
+        .add_system(game::card_played)
+        .add_system(game::play_card)
+        .add_system(game::uno)
+        .add_system(game::counter_uno)
+        .add_system(game::color_chosen)
+        .add_system(game::game_end)
         .run();
 }

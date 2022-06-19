@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 bevy_egui = "0.14"
 serde = "1.0"
-uuid = "1.0"
 itertools = "0.10"
 uno = { path = "../uno" }
 naia-bevy-client = "0.10"

@@ -275,7 +275,7 @@ fn play_card(
     mut client: Client<Protocol, Channels>,
 ) {
     for PlayCardEvent(card) in play_card_event.iter() {
-        client.send_message(Channels::Uno, &protocol::PlayCard::new(*card));
+        client.send_message(Channels::Uno, &protocol::CardPlayed::new(*card));
     }
 }
 

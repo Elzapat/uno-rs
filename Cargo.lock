@@ -3225,7 +3225,6 @@ dependencies = [
  "naia-bevy-client",
  "serde",
  "uno",
- "uuid 1.1.0",
  "wasm-bindgen",
 ]
 

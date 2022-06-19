@@ -48,7 +48,7 @@ fn end_game_lobby(
     mut egui_context: ResMut<EguiContext>,
     winner_query: Query<(Entity, &Player, Option<&ThisPlayer>), With<Winner>>,
     players_query: Query<(Entity, &Player, Option<&ThisPlayer>), Without<Winner>>,
-    // mut game_exit_event: EventWriter<GameExitEvent>,
+    mut game_exit_event: EventWriter<GameExitEvent>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -116,7 +116,9 @@ fn end_game_lobby(
                 //     todo!();
                 // }
 
-                if ui.button("Back to menu").clicked() {}
+                if ui.button("Back to menu").clicked() {
+                    game_exit_event.send(GameExitEvent);
+                }
             })
         });
 }
@@ -287,7 +289,7 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
 
         color
     } else {
-        egui::Color32::from_gray(200)
+        egui::Color32::from_gray(150)
     };
 
     for _ in 0..*player.hand_size {

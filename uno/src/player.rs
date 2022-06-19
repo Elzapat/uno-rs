@@ -1,4 +1,4 @@
-use crate::card::{Card, Color};
+use crate::card::{Card, Color, Value};
 use bevy_ecs::prelude::Component;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -10,8 +10,14 @@ pub enum PlayerState {
     ChoosingColorWildFour,
     /// Player has to choose a color and confirm Uno, keep state of both actions to proceed only
     /// when both are done
-    ChoosingColorWildUno([bool; 2]),
-    ChoosingColorWildFourUno([bool; 2]),
+    ChoosingColorWildUno {
+        uno_done: bool,
+        color_chosen: bool,
+    },
+    ChoosingColorWildFourUno {
+        uno_done: bool,
+        color_chosen: bool,
+    },
     Uno,
 }
 
@@ -41,6 +47,22 @@ impl Player {
         self.hand
             .iter()
             .any(|card| card.can_be_played(top_card, current_color))
+    }
+
+    /// Compute the score of the player with their current hand
+    pub fn compute_score(&mut self) -> u32 {
+        let mut score = 0;
+
+        for card in self.hand.iter() {
+            score += match card.value {
+                Value::Wild | Value::WildFour => 50,
+                Value::Reverse | Value::DrawTwo | Value::Skip => 20,
+                Value::Zero => 0,
+                value => value as u32,
+            }
+        }
+
+        score
     }
 }
 

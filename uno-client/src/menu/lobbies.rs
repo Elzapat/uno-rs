@@ -5,12 +5,10 @@ use crate::{
 };
 use bevy::prelude::*;
 use naia_bevy_client::events::MessageEvent;
-use uno::Player;
 use uno::{
     network::{Channels, Protocol},
     Lobby,
 };
-use uuid::Uuid;
 
 pub fn execute_packets(
     mut commands: Commands,

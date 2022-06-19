@@ -13,9 +13,6 @@ use uno::{
     Deck, Player,
 };
 
-#[derive(Component, Deref, DerefMut)]
-pub struct InGame(pub LobbyId);
-
 pub struct PassTurnEvent {
     pub skipping: bool,
     pub game_id: LobbyId,
@@ -25,6 +22,7 @@ pub struct StartGameEvent(pub LobbyId);
 pub struct DrawCardEvent {
     pub user_key: UserKey,
     pub game_id: LobbyId,
+    pub player_action: bool,
 }
 pub struct CardPlayedEvent {
     pub user_key: UserKey,
@@ -35,16 +33,31 @@ pub struct PlayCardEvent {
     pub card: Card,
     pub game_id: LobbyId,
 }
+pub struct ColorChosenEvent {
+    pub color: Color,
+    pub game_id: LobbyId,
+}
+pub struct UnoEvent {
+    pub user_key: UserKey,
+    pub game_id: LobbyId,
+}
+pub struct CounterUnoEvent {
+    pub user_key: UserKey,
+    pub game_id: LobbyId,
+}
+pub struct GameEndEvent {
+    pub game_id: LobbyId,
+}
 
 #[derive(Clone)]
 pub struct Game {
+    pub players: Vec<PlayerData>,
+    pub current_color: Color,
     settings: GameSettings,
-    players: Vec<(UserKey, Entity)>,
     deck: Deck,
     discard: Deck,
     turn_index: usize,
     reverse_turn: bool,
-    current_color: Color,
 }
 
 impl Default for Game {
@@ -88,6 +101,13 @@ impl Game {
     }
 }
 
+#[derive(Clone)]
+pub struct PlayerData {
+    pub player: Player,
+    pub user_key: UserKey,
+    pub server_entity: Entity,
+}
+
 #[derive(Debug, Clone)]
 pub struct GameSettings {
     initial_cards: u32,
@@ -102,22 +122,6 @@ impl Default for GameSettings {
 #[derive(Clone, Deref, DerefMut)]
 pub struct Games(pub HashMap<LobbyId, Game>);
 
-fn get_player_from_game<'a, 'b, 'c, 'd>(
-    game: &'b Game,
-    game_id: LobbyId,
-    players_query: &'a mut Query<'a, 'd, (&'_ mut Player, &'_ UserKeyComponent, &'_ InGame)>,
-) -> Option<(Mut<'a, Player>, UserKey)> {
-    for (mut player, user_key, InGame(id)) in players_query.iter_mut() {
-        return if **user_key == game.players[game.turn_index].0 && *id == game_id {
-            Some((player, **user_key))
-        } else {
-            None
-        };
-    }
-
-    None
-}
-
 pub fn setup_game(
     mut commands: Commands,
     mut server: Server<Protocol, Channels>,
@@ -127,7 +131,7 @@ pub fn setup_game(
     mut pass_turn_event: EventWriter<PassTurnEvent>,
     global: Res<Global>,
     lobbies_query: Query<(Entity, &Lobby)>,
-    players_query: Query<(Entity, &InLobby, &UserKeyComponent)>,
+    players_query: Query<(&Player, Entity, &InLobby, &UserKeyComponent)>,
 ) {
     for StartGameEvent(lobby_id) in start_game_event.iter() {
         // Remove the lobby
@@ -158,24 +162,25 @@ pub fn setup_game(
             .enter_room(&global.lobbies_room_key[lobby_id])
             .insert(CurrentColor::new(game.current_color));
 
-        for (entity, InLobby(player_lobby_id), user_key) in players_query.iter() {
+        for (player, entity, InLobby(player_lobby_id), user_key) in players_query.iter() {
             if player_lobby_id == lobby_id {
-                commands
-                    .entity(entity)
-                    .remove::<InLobby>()
-                    .insert(InGame(*lobby_id));
+                commands.entity(entity).despawn();
 
                 server.send_message(user_key, Channels::Uno, &StartGame::new());
 
                 // Add the player to the game
-                game.players
-                    .push((**user_key, global.user_keys_entities[user_key]));
+                game.players.push(PlayerData {
+                    player: player.clone(),
+                    user_key: **user_key,
+                    server_entity: global.user_keys_entities[user_key],
+                });
 
                 // Send the intial card to the player
                 for _ in 0..game.settings.initial_cards {
                     draw_card_event.send(DrawCardEvent {
                         user_key: **user_key,
                         game_id: *lobby_id,
+                        player_action: false,
                     });
                 }
 
@@ -199,9 +204,14 @@ pub fn draw_card(
     mut server: Server<Protocol, Channels>,
     mut games: ResMut<Games>,
     mut draw_card_events: EventReader<DrawCardEvent>,
-    mut players_query: Query<(&mut Player, &UserKeyComponent, &InGame)>,
+    mut pass_turn_event: EventWriter<PassTurnEvent>,
 ) {
-    for DrawCardEvent { user_key, game_id } in draw_card_events.iter() {
+    for DrawCardEvent {
+        user_key,
+        game_id,
+        player_action,
+    } in draw_card_events.iter()
+    {
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
@@ -211,11 +221,25 @@ pub fn draw_card(
         };
 
         let card = game.draw_card();
-        for (mut player, player_user_key, InGame(player_game_id)) in players_query.iter_mut() {
-            if player_game_id == game_id && **player_user_key == *user_key {
-                println!("sending draw card message");
-                server.send_message(player_user_key, Channels::Uno, &DrawCard::new(card));
-                player.hand.push(card);
+        for player_data in &mut game.players {
+            if player_data.user_key == *user_key {
+                player_data.player.hand.push(card);
+                server.send_message(&player_data.user_key, Channels::Uno, &DrawCard::new(card));
+
+                if *player_action {
+                    if !player_data
+                        .player
+                        .can_play(*game.discard.top().unwrap(), game.current_color)
+                    {
+                        pass_turn_event.send(PassTurnEvent {
+                            skipping: false,
+                            game_id: *game_id,
+                        });
+                    } else {
+                        player_data.player.state = PlayerState::PlayingCard;
+                    }
+                }
+
                 break;
             }
         }
@@ -226,9 +250,9 @@ pub fn pass_turn(
     mut server: Server<Protocol, Channels>,
     mut games: ResMut<Games>,
     mut pass_turn_events: EventReader<PassTurnEvent>,
-    mut players_query: Query<(&mut Player, &UserKeyComponent, &InGame)>,
 ) {
     for PassTurnEvent { skipping, game_id } in pass_turn_events.iter() {
+        dbg!("passing turn");
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
@@ -239,39 +263,36 @@ pub fn pass_turn(
 
         game.turn_index = game.next_player_index();
 
-        for (mut player, user_key, InGame(id)) in players_query.iter_mut() {
-            if **user_key == game.players[game.turn_index].0 && id == game_id {
-                player.is_playing = true;
-                player.state = PlayerState::WaitingToPlay;
-            } else if id == game_id {
-                player.is_playing = false;
+        let current_player_user_key = game.players[game.turn_index].user_key;
+
+        for player_data in &mut game.players {
+            if player_data.user_key == current_player_user_key {
+                player_data.player.is_playing = true;
+                player_data.player.state = PlayerState::WaitingToPlay;
+            } else {
+                player_data.player.is_playing = false;
             }
         }
 
         if !skipping {
-            for (mut player, user_key, InGame(id)) in players_query.iter_mut() {
-                if id == game_id && **user_key == game.players[game.turn_index].0 {
-                    if !player.can_play(*game.discard.top().unwrap(), game.current_color) {
-                        println!("cant play");
-                        player.state = PlayerState::DrawingCard;
-                        server.send_message(user_key, Channels::Uno, &HaveToDrawCard::new());
-                    } else {
-                        println!("can play");
-                        player.state = PlayerState::PlayingCard;
-                    }
+            let PlayerData {
+                player, user_key, ..
+            } = &mut game.players[game.turn_index];
 
-                    break;
-                }
+            if player.can_play(*game.discard.top().unwrap(), game.current_color) {
+                player.state = PlayerState::PlayingCard;
+            } else {
+                player.state = PlayerState::DrawingCard;
+                server.send_message(user_key, Channels::Uno, &HaveToDrawCard::new());
             }
         }
     }
 }
 
-fn card_played(
+pub fn card_played(
     mut server: Server<Protocol, Channels>,
     mut games: ResMut<Games>,
     mut card_played_events: EventReader<CardPlayedEvent>,
-    mut players_query: Query<(&mut Player, &UserKeyComponent, &InGame)>,
     mut play_card_event: EventWriter<PlayCardEvent>,
 ) {
     for event in card_played_events.iter() {
@@ -289,36 +310,403 @@ fn card_played(
             }
         };
 
-        let mut opt = None;
-        for (player, user_key, InGame(id)) in players_query.iter_mut() {
-            if **user_key == game.players[game.turn_index].0 && *id == *game_id {
-                opt = Some(player);
-                break;
-            } else {
-                continue;
-            }
-        }
-        let player = match opt {
-            Some(p) => p,
-            None => return,
-        };
+        let PlayerData { player, .. } = &mut game.players[game.turn_index];
 
         let valid = if player.state == PlayerState::PlayingCard {
-            let valid = card.can_be_played(*game.discard.top().unwrap(), game.current_color)
-                && player.hand.contains(card);
-
-            if valid {
-                play_card_event.send(PlayCardEvent {
-                    card: *card,
-                    game_id: *game_id,
-                });
-            }
-
-            valid
+            card.can_be_played(*game.discard.top().unwrap(), game.current_color)
+                && player.hand.contains(card)
         } else {
             false
         };
 
         server.send_message(user_key, Channels::Uno, &CardValidation::new(valid));
+
+        if valid {
+            play_card_event.send(PlayCardEvent {
+                card: *card,
+                game_id: *game_id,
+            });
+        }
+    }
+}
+
+pub fn play_card(
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut play_card_event: EventReader<PlayCardEvent>,
+    mut pass_turn_event: EventWriter<PassTurnEvent>,
+    mut draw_card_event: EventWriter<DrawCardEvent>,
+    mut game_end_event: EventWriter<GameEndEvent>,
+) {
+    for PlayCardEvent { card, game_id } in play_card_event.iter() {
+        let mut game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in card_played");
+                continue;
+            }
+        };
+
+        for PlayerData { user_key, .. } in &game.players {
+            if *user_key != game.players[game.turn_index].user_key {
+                server.send_message(user_key, Channels::Uno, &CardPlayed::new(*card));
+            }
+        }
+
+        let in_uno = {
+            let PlayerData { player, .. } = &mut game.players[game.turn_index];
+
+            let card_idx = if let Some(card_idx) = player.hand.iter().position(|&c| c == *card) {
+                card_idx
+            } else {
+                error!("Player has played a card they doesn't have have in their hand.");
+                return;
+            };
+
+            player.hand.remove(card_idx);
+            game.discard.add(*card);
+            game.current_color = card.color;
+
+            if player.hand.len() == 1 {
+                player.state = PlayerState::Uno;
+            }
+
+            player.state == PlayerState::Uno
+        };
+
+        if game.players[game.turn_index].player.hand.is_empty() {
+            game_end_event.send(GameEndEvent { game_id: *game_id });
+
+            return;
+        }
+
+        if in_uno {
+            let current_user_key = game.players[game.turn_index].user_key;
+
+            for player_data in &game.players {
+                if current_user_key == player_data.user_key {
+                    server.send_message(&player_data.user_key, Channels::Uno, &Uno::new());
+                } else {
+                    server.send_message(&player_data.user_key, Channels::Uno, &CounterUno::new());
+                }
+            }
+        }
+
+        let pass_turn = match card.value {
+            Value::Reverse => reverse_played(*game_id, game, &mut pass_turn_event),
+            Value::DrawTwo => {
+                draw_two_played(*game_id, game, &mut pass_turn_event, &mut draw_card_event)
+            }
+            Value::Skip => skip_played(*game_id, &mut pass_turn_event),
+            Value::Wild => wild_played(game, in_uno),
+            Value::WildFour => wild_four_played(*game_id, game, in_uno, &mut draw_card_event),
+            _ => true,
+        };
+
+        dbg!(game.players[game.turn_index].player.state);
+        dbg!(in_uno);
+
+        if !in_uno && pass_turn {
+            pass_turn_event.send(PassTurnEvent {
+                skipping: false,
+                game_id: *game_id,
+            });
+        }
+    }
+}
+
+fn reverse_played(
+    game_id: LobbyId,
+    game: &mut Game,
+    pass_turn_event: &mut EventWriter<PassTurnEvent>,
+) -> bool {
+    game.reverse_turn = !game.reverse_turn;
+
+    if game.players.len() == 2 {
+        pass_turn_event.send(PassTurnEvent {
+            skipping: true,
+            game_id,
+        });
+    }
+
+    true
+}
+fn draw_two_played(
+    game_id: LobbyId,
+    game: &mut Game,
+    pass_turn_event: &mut EventWriter<PassTurnEvent>,
+    draw_card_event: &mut EventWriter<DrawCardEvent>,
+) -> bool {
+    for _ in 0..2 {
+        draw_card_event.send(DrawCardEvent {
+            user_key: game.players[game.next_player_index()].user_key,
+            game_id,
+            player_action: false,
+        })
+    }
+
+    pass_turn_event.send(PassTurnEvent {
+        skipping: true,
+        game_id,
+    });
+
+    true
+}
+
+fn skip_played(game_id: LobbyId, pass_turn_event: &mut EventWriter<PassTurnEvent>) -> bool {
+    pass_turn_event.send(PassTurnEvent {
+        skipping: true,
+        game_id,
+    });
+
+    true
+}
+
+fn wild_played(game: &mut Game, in_uno: bool) -> bool {
+    game.players[game.turn_index].player.state = if in_uno {
+        PlayerState::ChoosingColorWildUno {
+            uno_done: false,
+            color_chosen: false,
+        }
+    } else {
+        PlayerState::ChoosingColorWild
+    };
+
+    false
+}
+
+fn wild_four_played(
+    game_id: LobbyId,
+    game: &mut Game,
+    in_uno: bool,
+    draw_card_event: &mut EventWriter<DrawCardEvent>,
+) -> bool {
+    game.players[game.turn_index].player.state = if in_uno {
+        PlayerState::ChoosingColorWildFourUno {
+            uno_done: false,
+            color_chosen: false,
+        }
+    } else {
+        PlayerState::ChoosingColorWildFour
+    };
+
+    let next_player = game.players[game.next_player_index()].user_key;
+    for _ in 0..4 {
+        draw_card_event.send(DrawCardEvent {
+            user_key: next_player,
+            player_action: false,
+            game_id,
+        });
+    }
+
+    false
+}
+
+pub fn uno(
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut uno_events: EventReader<UnoEvent>,
+    mut pass_turn_event: EventWriter<PassTurnEvent>,
+) {
+    for UnoEvent { game_id, .. } in uno_events.iter() {
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in draw_card");
+                continue;
+            }
+        };
+
+        for PlayerData { user_key, .. } in &game.players {
+            server.send_message(user_key, Channels::Uno, &StopUno::new());
+        }
+
+        let PlayerData { player, .. } = &mut game.players[game.turn_index];
+
+        let (pass_turn, skip_turn) = match player.state {
+            PlayerState::Uno => (true, false),
+            PlayerState::ChoosingColorWildUno {
+                ref mut uno_done,
+                color_chosen,
+            } => {
+                *uno_done = true;
+                (*uno_done && color_chosen, true)
+            }
+            PlayerState::ChoosingColorWildFourUno {
+                ref mut uno_done,
+                color_chosen,
+            } => {
+                *uno_done = true;
+                (*uno_done && color_chosen, false)
+            }
+            _ => {
+                error!("Player {player:?} called uno without being in Uno state");
+                (true, false)
+            }
+        };
+
+        if pass_turn {
+            if skip_turn || game.discard.top().unwrap().value == Value::DrawTwo {
+                pass_turn_event.send(PassTurnEvent {
+                    skipping: true,
+                    game_id: *game_id,
+                });
+            }
+
+            pass_turn_event.send(PassTurnEvent {
+                skipping: false,
+                game_id: *game_id,
+            });
+        }
+    }
+}
+
+pub fn counter_uno(
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut counter_uno_events: EventReader<CounterUnoEvent>,
+    mut draw_card_event: EventWriter<DrawCardEvent>,
+    mut pass_turn_event: EventWriter<PassTurnEvent>,
+) {
+    for CounterUnoEvent { game_id, .. } in counter_uno_events.iter() {
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in draw_card");
+                continue;
+            }
+        };
+
+        for PlayerData { user_key, .. } in &game.players {
+            server.send_message(user_key, Channels::Uno, &StopUno::new());
+        }
+
+        let PlayerData {
+            player, user_key, ..
+        } = &mut game.players[game.turn_index];
+
+        for _ in 0..2 {
+            draw_card_event.send(DrawCardEvent {
+                user_key: *user_key,
+                game_id: *game_id,
+                player_action: false,
+            });
+        }
+
+        let (pass_turn, skip_turn) = match player.state {
+            PlayerState::Uno => (true, false),
+            PlayerState::ChoosingColorWildUno {
+                ref mut uno_done,
+                color_chosen,
+            } => {
+                *uno_done = true;
+                (*uno_done && color_chosen, true)
+            }
+            PlayerState::ChoosingColorWildFourUno {
+                ref mut uno_done,
+                color_chosen,
+            } => {
+                *uno_done = true;
+                (*uno_done && color_chosen, false)
+            }
+            _ => {
+                error!(
+                    "Player {player:?} called counter uno when playing playing wasn't in Uno state"
+                );
+                (true, false)
+            }
+        };
+
+        if pass_turn {
+            if skip_turn || game.discard.top().unwrap().value == Value::DrawTwo {
+                pass_turn_event.send(PassTurnEvent {
+                    skipping: true,
+                    game_id: *game_id,
+                });
+            }
+
+            pass_turn_event.send(PassTurnEvent {
+                skipping: false,
+                game_id: *game_id,
+            });
+        }
+    }
+}
+
+pub fn color_chosen(
+    mut games: ResMut<Games>,
+    mut color_chosen_events: EventReader<ColorChosenEvent>,
+    mut pass_turn_event: EventWriter<PassTurnEvent>,
+) {
+    for ColorChosenEvent { color, game_id } in color_chosen_events.iter() {
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in draw_card");
+                continue;
+            }
+        };
+
+        let PlayerData { player, .. } = &mut game.players[game.turn_index];
+
+        let (pass_turn, skip_turn) = match player.state {
+            PlayerState::ChoosingColorWild => (true, false),
+            PlayerState::ChoosingColorWildFour => (true, true),
+            PlayerState::ChoosingColorWildUno {
+                uno_done,
+                ref mut color_chosen,
+            } => {
+                *color_chosen = true;
+                (uno_done && *color_chosen, false)
+            }
+            PlayerState::ChoosingColorWildFourUno {
+                uno_done,
+                ref mut color_chosen,
+            } => {
+                *color_chosen = true;
+                (uno_done && *color_chosen, true)
+            }
+            _ => {
+                error!("Player {player:?} changed color without being in ChoosingColor state");
+                return;
+            }
+        };
+
+        game.current_color = *color;
+
+        if pass_turn {
+            if skip_turn {
+                pass_turn_event.send(PassTurnEvent {
+                    skipping: true,
+                    game_id: *game_id,
+                });
+            }
+
+            pass_turn_event.send(PassTurnEvent {
+                skipping: false,
+                game_id: *game_id,
+            });
+        }
+    }
+}
+
+pub fn game_end(
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut game_end_events: EventReader<GameEndEvent>,
+) {
+    for GameEndEvent { game_id } in game_end_events.iter() {
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in draw_card");
+                continue;
+            }
+        };
+
+        for player_data in &mut game.players {
+            player_data.player.score += player_data.player.compute_score();
+            server.send_message(&player_data.user_key, Channels::Uno, &GameEnd::new());
+        }
     }
 }
