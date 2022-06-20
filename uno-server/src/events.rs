@@ -13,6 +13,7 @@ use naia_bevy_server::{
     events::{AuthorizationEvent, ConnectionEvent, DisconnectionEvent, MessageEvent},
     Server,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
 use uno::{
     network::{
         protocol::{Player as NetworkPlayer, *},
@@ -20,6 +21,11 @@ use uno::{
     },
     Player,
 };
+
+fn new_player_id() -> u64 {
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    COUNTER.fetch_add(1, Ordering::SeqCst)
+}
 
 pub fn authorization_event(
     mut auth_events: EventReader<AuthorizationEvent<Protocol>>,
@@ -46,24 +52,59 @@ pub fn connection_event(
 
         server.user_mut(user_key).enter_room(&global.main_room_key);
 
+        let player_id = new_player_id();
+        server.send_message(user_key, Channels::Uno, &YourPlayerId::new(player_id));
+
+        server.spawn().enter_room(&global.main_room_key);
+
         let id = server
             .spawn()
             .enter_room(&global.main_room_key)
-            .insert(NetworkPlayer::new(None, "Unknown Player".to_owned(), 0))
+            .insert(NetworkPlayer::new(
+                player_id,
+                None,
+                "Unknown Player".to_owned(),
+                0,
+            ))
             .id();
-
-        server
-            .spawn()
-            .enter_room(&global.main_room_key)
-            .insert(ThisPlayer::new(id));
 
         global.user_keys_entities.insert(*user_key, id);
     }
 }
 
-pub fn disconnection_event(mut disconnection_events: EventReader<DisconnectionEvent>) {
-    for DisconnectionEvent(_user_key, _) in disconnection_events.iter() {
+pub fn disconnection_event(
+    mut global: ResMut<Global>,
+    mut server: Server<Protocol, Channels>,
+    mut disconnection_events: EventReader<DisconnectionEvent>,
+    // this_player_query: Query<(Entity, &ThisPlayer)>,
+    players_query: Query<(Entity, &UserKeyComponent), With<Player>>,
+) {
+    for DisconnectionEvent(user_key, _) in disconnection_events.iter() {
         info!("A user disconnected");
+
+        server
+            .entity_mut(&global.user_keys_entities[user_key])
+            .despawn();
+
+        /*
+        for (entity, this_player) in this_player_query.iter() {
+            if global.user_keys_entities[user_key] == Entity::from_bits(*this_player.entity) {
+                info!("found this player entity");
+                server.entity_mut(&entity).despawn();
+                break;
+            }
+        }
+        */
+
+        for (entity, player_user_key) in players_query.iter() {
+            if *user_key == **player_user_key {
+                info!("found player entity");
+                server.entity_mut(&entity).despawn();
+                break;
+            }
+        }
+
+        global.user_keys_entities.remove(user_key);
     }
 }
 

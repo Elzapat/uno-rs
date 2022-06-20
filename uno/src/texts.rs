@@ -22,10 +22,27 @@ pub enum TextId {
     UnoTitle,
     LobbiesTitle,
     Lobby,
+    CreateLobby,
+    JoinLobby,
+    LeaveLobby,
+    StartGame,
     // Menu Settings
+    Settings,
     Username,
     EnableAnimations,
     Language,
+    // Game
+    DrawCard,
+    Uno,
+    CounterUno,
+    ChooseColor,
+    // End Game
+    Score,
+    RemainingCards,
+    EndGameTitle,
+    BackToMenu,
+    // Errors
+    EnterUsername,
 }
 
 pub type Text = HashMap<Language, String>;
@@ -35,11 +52,13 @@ pub struct Texts(HashMap<TextId, Text>);
 
 impl Texts {
     pub fn get_all() -> Texts {
-        ron::de::from_bytes(include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/data/texts.ron"
-        )))
-        .unwrap()
+        Texts(
+            ron::de::from_bytes(include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/data/texts.ron"
+            )))
+            .unwrap(),
+        )
     }
 
     pub fn get(&self, id: TextId, language: Language) -> String {

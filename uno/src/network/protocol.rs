@@ -17,9 +17,9 @@ mod play_card;
 mod player;
 mod start_game;
 mod stop_uno;
-mod this_player;
 mod uno;
 mod username;
+mod your_player_id;
 
 pub use card_played::CardPlayed;
 pub use card_validation::CardValidation;
@@ -40,16 +40,16 @@ pub use play_card::PlayCard;
 pub use player::Player;
 pub use start_game::StartGame;
 pub use stop_uno::StopUno;
-pub use this_player::ThisPlayer;
 pub use uno::Uno;
 pub use username::Username;
+pub use your_player_id::YourPlayerId;
 
 use naia_shared::Protocolize;
 
 #[derive(Protocolize)]
 pub enum Protocol {
     Player(Player),
-    ThisPlayer(ThisPlayer),
+    YourPlayerId(YourPlayerId),
     Lobby(Lobby),
     CreateLobby(CreateLobby),
     JoinLobby(JoinLobby),

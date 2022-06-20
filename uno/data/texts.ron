@@ -1,4 +1,20 @@
-({
+{
+    Settings: {
+        Francais: "Paramètres",
+        English: "Settings",
+    },
+    Username: {
+        Francais: "Pseudo",
+        English: "Username",
+    },
+    EnableAnimations: {
+        Francais: "Activer les animations",
+        English: "Enable animations",
+    },
+    Language: {
+        Francais: "Langue",
+        English: "Language",
+    },
     UnoTitle: {
         Francais: "Uno",
         English: "Uno"
@@ -11,16 +27,56 @@
         Francais: "Salle",
         English: "Lobby",
     },
-    Username: {
-        Francais: "Pseudo",
-        English: "Username",
+    CreateLobby: {
+        Francais: "Créer une salle",
+        English: "Create lobby",
     },
-    EnableAnimations: {
-        Francais: "Activer les animations",
-        English: "Enable animations",
+    JoinLobby: {
+        Francais: "Rejoindre la salle",
+        English: "Join lobby",
     },
-    Language: {
-        Francais: "Langage",
-        English: "Language",
+    LeaveLobby: {
+        Francais: "Quitter la salle",
+        English: "Leave lobby",
     },
-})
+    StartGame: {
+        Francais: "Démarrer la partie",
+        English: "Start game",
+    },
+    EnterUsername: {
+        Francais: "Veuillez saisir un pseudo avant de rejoindre une salle",
+        English: "Enter a username before joining a lobby",
+    },
+    DrawCard: {
+        Francais: "Piocher une carte",
+        English: "Draw card",
+    },
+    Uno: {
+        Francais: "Uno",
+        English: "Uno",
+    },
+    CounterUno: {
+        Francais: "Contre Uno",
+        English: "Counter Uno",
+    },
+    ChooseColor: {
+        Francais: "Choisir une couleur",
+        English: "Choose a color",
+    },
+    Score: {
+        Francais: "Score",
+        English: "Score",
+    },
+    EndGameTitle: {
+        Francais: "Fin de partie",
+        English: "End game",
+    },
+    BackToMenu: {
+        Francais: "Retour au menu",
+        English: "Back to menu",
+    },
+    RemainingCards: {
+        Francais: "Cartes restantes",
+        English: "Remaining cards",
+    },
+}

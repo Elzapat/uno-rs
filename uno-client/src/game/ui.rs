@@ -1,10 +1,11 @@
 use super::{
     run_if_in_end_game_lobby, run_if_in_game, CallCounterUno, CallUno, ChooseColor,
-    ColorChosenEvent, DrawCard, Winner,
+    ColorChosenEvent, DrawCard,
 };
 use crate::{
     game::GameExitEvent,
     utils::constants::{CARD_SCALE, CARD_WIDTH, COLORS},
+    PlayerId, Settings,
 };
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
@@ -16,6 +17,7 @@ use uno::{
         protocol::{self, CurrentColor, GameExit, Player, Protocol},
         Channels,
     },
+    texts::{TextId, Texts},
 };
 
 pub struct GameUiPlugin;
@@ -47,11 +49,15 @@ impl Plugin for GameUiPlugin {
 fn end_game_lobby(
     mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
-    winner_query: Query<(Entity, &Player), With<Winner>>,
-    players_query: Query<(Entity, &Player), Without<Winner>>,
     mut game_exit_event: EventWriter<GameExitEvent>,
+    players_query: Query<(Entity, &Player)>,
+    player_id: Res<PlayerId>,
+    settings: Res<Settings>,
+    texts: Res<Texts>,
 ) {
-    egui::Window::new(egui::RichText::new("End Game Lobby").strong())
+    let language = settings.language;
+
+    egui::Window::new(egui::RichText::new(texts.get(TextId::EndGameTitle, language)).strong())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .min_width(700.0)
         .min_height(400.0)
@@ -62,10 +68,10 @@ fn end_game_lobby(
                 for (i, col) in cols.iter_mut().enumerate() {
                     col.label(
                         egui::RichText::new(match i {
-                            0 => "Username",
-                            1 => "Score",
-                            2 => "Remaining cards",
-                            _ => "",
+                            0 => texts.get(TextId::Username, language),
+                            1 => texts.get(TextId::Score, language),
+                            2 => texts.get(TextId::RemainingCards, language),
+                            _ => unreachable!(),
                         })
                         .heading()
                         .strong(),
@@ -75,30 +81,13 @@ fn end_game_lobby(
 
             ui.separator();
 
-            if let Ok((_, winner)) = winner_query.get_single() {
-                let mut first_label = egui::RichText::new(&*winner.username);
-                let mut second_label = egui::RichText::new(winner.score.to_string());
-
-                if true {
-                    first_label = first_label.strong();
-                    second_label = second_label.strong();
-                }
-
-                ui.columns(3, |cols| {
-                    cols[0].label(first_label);
-                    cols[1].label(second_label);
-                });
-            }
-
-            ui.separator();
-
             let players = players_query
                 .iter()
                 .sorted_by(|(_, p1), (_, p2)| p1.score.cmp(&p2.score));
 
             for (_, player) in players {
                 ui.columns(3, |cols| {
-                    if true {
+                    if *player.id == player_id.unwrap_or(0) {
                         cols[0].label(egui::RichText::new(&*player.username).strong());
                         cols[1].label(egui::RichText::new(player.score.to_string()).strong());
                     } else {
@@ -117,7 +106,7 @@ fn end_game_lobby(
                 //     todo!();
                 // }
 
-                if ui.button("Back to menu").clicked() {
+                if ui.button(texts.get(TextId::BackToMenu, language)).clicked() {
                     game_exit_event.send(GameExitEvent);
                     client.send_message(Channels::Uno, &GameExit::new());
                 }
@@ -129,6 +118,7 @@ fn players_panel(
     mut egui_context: ResMut<EguiContext>,
     players_query: Query<&Player>,
     current_color_query: Query<&CurrentColor>,
+    player_id: Res<PlayerId>,
 ) {
     egui::TopBottomPanel::top("Players").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
@@ -138,13 +128,15 @@ fn players_panel(
                 Err(_) => Color::Black,
             };
 
+            let players = players_query.iter().sorted_by(|p1, p2| p1.id.cmp(&p2.id));
+
             ui.columns(size, |cols| {
-                for (col, player) in cols.iter_mut().zip(players_query.iter()) {
+                for (col, player) in cols.iter_mut().zip(players) {
                     col.vertical_centered(|ui| {
                         let mut text = egui::RichText::new(&*player.username);
 
-                        if true {
-                            text = text.color(egui::Color32::WHITE);
+                        if *player.id == player_id.unwrap_or(0) {
+                            text = text.color(egui::Color32::WHITE).underline();
                         }
 
                         ui.label(text);

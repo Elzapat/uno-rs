@@ -1,14 +1,17 @@
 use crate::{lobbies::InLobby, server::UserKeyComponent, Global};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
-use bevy_log::error;
+use bevy_log::{error, info};
 use naia_bevy_server::{Server, UserKey};
 use rand::Rng;
 use std::{collections::HashMap, default::Default};
 use uno::{
     card::{Card, Color, Value},
     lobby::LobbyId,
-    network::{protocol::*, Channels, Protocol},
+    network::{
+        protocol::{Player as NetworkPlayer, *},
+        Channels, Protocol,
+    },
     player::PlayerState,
     Deck, Player,
 };
@@ -146,6 +149,7 @@ pub fn setup_game(
     global: Res<Global>,
     lobbies_query: Query<(Entity, &Lobby)>,
     players_query: Query<(&Player, Entity, &InLobby, &UserKeyComponent)>,
+    network_players_query: Query<(Entity, &NetworkPlayer)>,
 ) {
     for StartGameEvent { lobby_id } in start_game_event.iter() {
         // Remove the lobby
@@ -209,6 +213,9 @@ pub fn setup_game(
             skipping: false,
             game_id: *lobby_id,
         });
+
+        game.players
+            .sort_unstable_by(|p1, p2| p1.server_entity.id().cmp(&p2.server_entity.id()));
 
         games.insert(*lobby_id, game);
     }
@@ -406,11 +413,15 @@ pub fn play_card(
         }
 
         let pass_turn = match card.value {
-            Value::Reverse => reverse_played(*game_id, game, &mut pass_turn_event),
-            Value::DrawTwo => {
-                draw_two_played(*game_id, game, &mut pass_turn_event, &mut draw_card_event)
-            }
-            Value::Skip => skip_played(*game_id, &mut pass_turn_event),
+            Value::Reverse => reverse_played(*game_id, game, in_uno, &mut pass_turn_event),
+            Value::DrawTwo => draw_two_played(
+                *game_id,
+                game,
+                in_uno,
+                &mut pass_turn_event,
+                &mut draw_card_event,
+            ),
+            Value::Skip => skip_played(*game_id, in_uno, &mut pass_turn_event),
             Value::Wild => wild_played(game, in_uno),
             Value::WildFour => wild_four_played(*game_id, game, in_uno, &mut draw_card_event),
             _ => true,
@@ -428,11 +439,12 @@ pub fn play_card(
 fn reverse_played(
     game_id: LobbyId,
     game: &mut Game,
+    in_uno: bool,
     pass_turn_event: &mut EventWriter<PassTurnEvent>,
 ) -> bool {
     game.reverse_turn = !game.reverse_turn;
 
-    if game.players.len() == 2 {
+    if game.players.len() == 2 && !in_uno {
         pass_turn_event.send(PassTurnEvent {
             skipping: true,
             game_id,
@@ -444,6 +456,7 @@ fn reverse_played(
 fn draw_two_played(
     game_id: LobbyId,
     game: &mut Game,
+    in_uno: bool,
     pass_turn_event: &mut EventWriter<PassTurnEvent>,
     draw_card_event: &mut EventWriter<DrawCardEvent>,
 ) -> bool {
@@ -455,19 +468,27 @@ fn draw_two_played(
         })
     }
 
-    pass_turn_event.send(PassTurnEvent {
-        skipping: true,
-        game_id,
-    });
+    if !in_uno {
+        pass_turn_event.send(PassTurnEvent {
+            skipping: true,
+            game_id,
+        });
+    }
 
     true
 }
 
-fn skip_played(game_id: LobbyId, pass_turn_event: &mut EventWriter<PassTurnEvent>) -> bool {
-    pass_turn_event.send(PassTurnEvent {
-        skipping: true,
-        game_id,
-    });
+fn skip_played(
+    game_id: LobbyId,
+    in_uno: bool,
+    pass_turn_event: &mut EventWriter<PassTurnEvent>,
+) -> bool {
+    if !in_uno {
+        pass_turn_event.send(PassTurnEvent {
+            skipping: true,
+            game_id,
+        });
+    }
 
     true
 }
@@ -540,14 +561,14 @@ pub fn uno(
                 color_chosen,
             } => {
                 *uno_done = true;
-                (*uno_done && color_chosen, true)
+                (*uno_done && color_chosen, false)
             }
             PlayerState::ChoosingColorWildFourUno {
                 ref mut uno_done,
                 color_chosen,
             } => {
                 *uno_done = true;
-                (*uno_done && color_chosen, false)
+                (*uno_done && color_chosen, true)
             }
             _ => {
                 error!("Player {player:?} called uno without being in Uno state");
@@ -556,7 +577,11 @@ pub fn uno(
         };
 
         if pass_turn {
-            if skip_turn || game.discard.top().unwrap().value == Value::DrawTwo {
+            if skip_turn
+                || game.discard.top().unwrap().value == Value::DrawTwo
+                || game.discard.top().unwrap().value == Value::Skip
+                || (game.players.len() == 2 && game.discard.top().unwrap().value == Value::Reverse)
+            {
                 pass_turn_event.send(PassTurnEvent {
                     skipping: true,
                     game_id: *game_id,
@@ -595,14 +620,6 @@ pub fn counter_uno(
             player, user_key, ..
         } = &mut game.players[game.turn_index];
 
-        for _ in 0..2 {
-            draw_card_event.send(DrawCardEvent {
-                user_key: *user_key,
-                game_id: *game_id,
-                player_action: false,
-            });
-        }
-
         let (pass_turn, skip_turn) = match player.state {
             PlayerState::Uno => (true, false),
             PlayerState::ChoosingColorWildUno {
@@ -610,22 +627,30 @@ pub fn counter_uno(
                 color_chosen,
             } => {
                 *uno_done = true;
-                (*uno_done && color_chosen, true)
+                (*uno_done && color_chosen, false)
             }
             PlayerState::ChoosingColorWildFourUno {
                 ref mut uno_done,
                 color_chosen,
             } => {
                 *uno_done = true;
-                (*uno_done && color_chosen, false)
+                (*uno_done && color_chosen, true)
             }
             _ => {
                 error!(
-                    "Player {player:?} called counter uno when playing playing wasn't in Uno state"
+                    "Player {player:?} called counter uno when playing player wasn't in Uno state"
                 );
                 (true, false)
             }
         };
+
+        for _ in 0..2 {
+            draw_card_event.send(DrawCardEvent {
+                user_key: *user_key,
+                game_id: *game_id,
+                player_action: false,
+            });
+        }
 
         if pass_turn {
             if skip_turn || game.discard.top().unwrap().value == Value::DrawTwo {
@@ -727,6 +752,7 @@ pub fn game_exit(
     mut games: ResMut<Games>,
     mut game_exit_events: EventReader<GameExitEvent>,
     mut global: ResMut<Global>,
+    mut players_query: Query<&mut Player>,
 ) {
     for GameExitEvent { user_key, game_id } in game_exit_events.iter() {
         let game = match games.get_mut(game_id) {
@@ -736,6 +762,11 @@ pub fn game_exit(
                 continue;
             }
         };
+
+        for mut player in players_query.iter_mut() {
+            player.hand.clear();
+            player.state = PlayerState::WaitingToPlay;
+        }
 
         let player_index = game
             .players

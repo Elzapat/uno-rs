@@ -32,6 +32,8 @@ pub struct SpriteSize {
     width: f32,
     height: f32,
 }
+#[derive(Deref, DerefMut, Component)]
+pub struct PlayerId(pub Option<u64>);
 
 // Resources
 pub struct Settings {
@@ -69,6 +71,7 @@ fn main() {
         enable_animations: true,
         language: Language::Francais,
     })
+    .insert_resource(PlayerId(None))
     .insert_resource(Texts::get_all());
 
     #[cfg(target_arch = "wasm32")]

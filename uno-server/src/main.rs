@@ -24,6 +24,8 @@ pub struct Global {
 }
 
 fn main() {
+    dotenv::dotenv().ok();
+
     App::default()
         .add_plugin(CorePlugin::default())
         .add_plugin(ScheduleRunnerPlugin::default())

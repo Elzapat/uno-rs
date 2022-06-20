@@ -2,15 +2,17 @@ use super::{LobbiesList, LobbyState};
 use crate::{
     game::{ExtraMessageEvent, StartGameEvent},
     utils::errors::Error,
+    PlayerId,
 };
 use bevy::prelude::*;
 use naia_bevy_client::events::MessageEvent;
-use uno::network::{Channels, Protocol};
+use uno::network::{protocol::YourPlayerId, Channels, Protocol};
 
 pub fn execute_packets(
     mut commands: Commands,
     mut lobby_state: ResMut<State<LobbyState>>,
     mut lobbies: ResMut<LobbiesList>,
+    mut player_id: ResMut<PlayerId>,
     mut start_game_event: EventWriter<StartGameEvent>,
     mut message_events: EventReader<MessageEvent<Protocol, Channels>>,
     mut extra_message_events: EventWriter<ExtraMessageEvent>,
@@ -40,6 +42,7 @@ pub fn execute_packets(
                     message: (*error.error).clone(),
                 });
             }
+            Protocol::YourPlayerId(YourPlayerId { id }) => **player_id = Some(**id),
             protocol => {
                 println!("receiving extra message");
                 extra_message_events.send(ExtraMessageEvent(protocol.clone()));

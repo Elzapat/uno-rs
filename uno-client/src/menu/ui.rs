@@ -1,49 +1,43 @@
 use super::LobbyState;
-use crate::{utils::errors::Error, Settings};
+use crate::{utils::errors::Error, PlayerId, Settings};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use naia_bevy_client::Client;
 use uno::{
     network::{
-        protocol::{self, Lobby, Player, ThisPlayer},
+        protocol::{self, Lobby, Player},
         Channels, Protocol,
     },
     texts::{Language, TextId, Texts},
 };
 
 pub fn settings_panel(
-    mut commands: Commands,
     mut settings: ResMut<Settings>,
     mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
     texts: Res<Texts>,
 ) {
-    egui::TopBottomPanel::top("Settings").show(egui_context.ctx_mut(), |ui| {
-        let language = settings.language;
+    let language = settings.language;
 
+    egui::TopBottomPanel::top("Settings").show(egui_context.ctx_mut(), |ui| {
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new("Settings").heading().strong());
+            ui.label(
+                egui::RichText::new(texts.get(TextId::Settings, language))
+                    .heading()
+                    .strong(),
+            );
         });
 
         ui.separator();
 
         ui.horizontal(|ui| {
             if ui.text_edit_singleline(&mut settings.username).changed() {
-                // Forbid characters ÿ and þ (255 and 254) because they would break packets
-                if settings.username.replace('ÿ', "").replace('þ', "").len()
-                    != settings.username.len()
-                {
-                    commands.spawn().insert(Error {
-                        message: "Your username cannot contain the character ÿ or þ.".to_owned(),
-                    });
-                } else {
-                    client.send_message(
-                        Channels::Uno,
-                        &protocol::Username::new(settings.username.clone()),
-                    );
-                }
+                client.send_message(
+                    Channels::Uno,
+                    &protocol::Username::new(settings.username.clone()),
+                );
             }
-            ui.label("Username ");
+            ui.label(texts.get(TextId::Username, language));
 
             ui.separator();
 
@@ -54,7 +48,7 @@ pub fn settings_panel(
 
             ui.separator();
 
-            egui::ComboBox::from_label("Language")
+            egui::ComboBox::from_label(texts.get(TextId::Language, language))
                 .selected_text(format!("{}", settings.language))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -79,10 +73,13 @@ pub fn lobby_panel(
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies_query: Query<&Lobby>,
-    players_query: Query<(Entity, &Player)>,
-    this_player_query: Query<&ThisPlayer>,
+    players_query: Query<&Player>,
+    player_id: Res<PlayerId>,
+    texts: Res<Texts>,
 ) {
-    let window = egui::Window::new("Uno")
+    let language = settings.language;
+
+    let window = egui::Window::new(texts.get(TextId::UnoTitle, language))
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false);
@@ -90,7 +87,7 @@ pub fn lobby_panel(
     match lobby_state.current() {
         LobbyState::LobbiesList => window.show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
-                ui.heading("Lobbies");
+                ui.heading(texts.get(TextId::LobbiesTitle, language));
             });
 
             ui.separator();
@@ -100,17 +97,23 @@ pub fn lobby_panel(
                     ui.vertical(|ui| {
                         for lobby in lobbies_query.iter() {
                             ui.add_space(10.0);
+
                             ui.group(|ui| {
-                                ui.heading(format!("Lobby #{}", *lobby.id));
+                                ui.heading(format!(
+                                    "{} #{}",
+                                    texts.get(TextId::Lobby, language),
+                                    *lobby.id
+                                ));
+
                                 ui.separator();
+
                                 ui.horizontal(|ui| {
                                     ui.label(format!("{}/10", *lobby.number_of_players));
-                                    if ui.button("Join Lobby").clicked() {
+
+                                    if ui.button(texts.get(TextId::JoinLobby, language)).clicked() {
                                         if settings.username.trim().is_empty() {
                                             commands.spawn().insert(Error {
-                                                message:
-                                                    "Please enter a username before joining a lobby"
-                                                        .to_owned(),
+                                                message: texts.get(TextId::EnterUsername, language),
                                             });
                                         } else {
                                             client.send_message(
@@ -128,50 +131,50 @@ pub fn lobby_panel(
             ui.separator();
 
             ui.vertical_centered(|ui| {
-                if ui.button("Create lobby").clicked() {
+                if ui
+                    .button(texts.get(TextId::CreateLobby, language))
+                    .clicked()
+                {
                     client.send_message(Channels::Uno, &protocol::CreateLobby::new());
                 }
             });
         }),
         LobbyState::InLobby(lobby_id) => window.show(egui_context.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
-                ui.heading(format!("Lobby #{}", lobby_id));
+                ui.heading(format!(
+                    "{} #{}",
+                    texts.get(TextId::Lobby, language),
+                    lobby_id
+                ));
             });
 
-            let this_player_entity = match this_player_query.get_single() {
-                Ok(ThisPlayer { entity }) => Entity::from_bits(**entity),
-                Err(_) => Entity::from_bits(0),
-            };
-            dbg!(this_player_entity);
-            dbg!(this_player_query.get_single().is_ok());
-
             ui.separator();
-            for (entity, player) in players_query.iter() {
+
+            for player in players_query.iter() {
                 let mut label = egui::RichText::new(format!("➡ {}", *player.username))
                     .monospace()
                     .heading();
 
-                if entity == this_player_entity {
+                if *player.id == player_id.unwrap_or(0) {
                     label = label.strong();
                 }
 
                 ui.label(label);
             }
+
             ui.separator();
 
             ui.vertical_centered(|ui| {
-                if ui.button("Leave lobby").clicked() {
+                if ui.button(texts.get(TextId::LeaveLobby, language)).clicked() {
                     client.send_message(Channels::Uno, &protocol::LeaveLobby::new(*lobby_id));
                 }
 
-                if ui.button("Start game").clicked() {
+                if ui.button(texts.get(TextId::StartGame, language)).clicked() {
                     client.send_message(Channels::Uno, &protocol::StartGame::new());
                 }
             });
         }),
-        _ => window.show(egui_context.ctx_mut(), |ui| {
-            ui.label("This window isn't supposed to show");
-        }),
+        _ => unreachable!(),
     };
 }
 

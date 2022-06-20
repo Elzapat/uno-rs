@@ -1,5 +1,5 @@
 use super::{
-    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent, Player,
+    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent,
     ToBeRemoved,
 };
 use crate::{

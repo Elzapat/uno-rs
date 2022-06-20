@@ -32,8 +32,6 @@ pub struct DrawCard;
 pub struct ToBeRemoved {
     timer: Timer,
 }
-#[derive(Component)]
-pub struct Winner;
 
 // Ressources
 pub struct GameAssets {
@@ -224,10 +222,18 @@ fn game_exit(
     mut game_exit_event: EventReader<GameExitEvent>,
     mut game_state: ResMut<State<GameState>>,
     mut lobby_state: ResMut<State<LobbyState>>,
+    mut hand: ResMut<Hand>,
+    cards_query: Query<Entity, With<CardComponent>>,
     draw_card_query: Query<Entity, With<DrawCard>>,
     players_query: Query<Entity, With<Player>>,
 ) {
     for _e in game_exit_event.iter() {
+        hand.size = 0;
+
+        for entity in cards_query.iter() {
+            commands.entity(entity).despawn();
+        }
+
         for entity in players_query.iter() {
             commands.entity(entity).despawn();
         }
