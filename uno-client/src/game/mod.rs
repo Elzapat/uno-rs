@@ -1,4 +1,5 @@
 use crate::{
+    menu::LobbyState,
     utils::constants::{CARD_HEIGHT, CARD_PADDING, CARD_WIDTH},
     GameState,
 };
@@ -19,8 +20,6 @@ pub struct GamePlugin;
 // Components
 #[derive(Debug, Component, Deref, DerefMut)]
 pub struct Player(UnoPlayer);
-#[derive(Component)]
-pub struct ThisPlayer;
 #[derive(Component)]
 pub struct ChooseColor;
 #[derive(Component)]
@@ -224,6 +223,7 @@ fn game_exit(
     mut commands: Commands,
     mut game_exit_event: EventReader<GameExitEvent>,
     mut game_state: ResMut<State<GameState>>,
+    mut lobby_state: ResMut<State<LobbyState>>,
     draw_card_query: Query<Entity, With<DrawCard>>,
     players_query: Query<Entity, With<Player>>,
 ) {
@@ -238,6 +238,10 @@ fn game_exit(
 
         if game_state.current() != &GameState::Lobbies {
             game_state.set(GameState::Lobbies).unwrap();
+        }
+
+        if let &LobbyState::InLobby(_) = lobby_state.current() {
+            lobby_state.set(LobbyState::LobbiesList).unwrap();
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::{
     run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent, Player,
-    ThisPlayer, ToBeRemoved,
+    ToBeRemoved,
 };
 use crate::{
     utils::constants::{

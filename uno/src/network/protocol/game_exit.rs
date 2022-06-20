@@ -4,11 +4,11 @@ use naia_shared::{Property, Replicate};
 #[derive(Component, Replicate)]
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct GameExit {
-    _p: Property<u8>,
+    _p: Property<()>,
 }
 
 impl GameExit {
     pub fn new() -> Self {
-        GameExit::new_complete(0)
+        GameExit::new_complete(())
     }
 }

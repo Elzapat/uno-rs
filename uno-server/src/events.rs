@@ -1,6 +1,7 @@
 use crate::{
     game::{
-        CardPlayedEvent, ColorChosenEvent, CounterUnoEvent, DrawCardEvent, StartGameEvent, UnoEvent,
+        CardPlayedEvent, ColorChosenEvent, CounterUnoEvent, DrawCardEvent, GameExitEvent,
+        StartGameEvent, UnoEvent,
     },
     lobbies::{CreateLobbyEvent, JoinLobbyEvent, LeaveLobbyEvent},
     server::{UserKeyComponent, UsernameChangedEvent},
@@ -51,6 +52,11 @@ pub fn connection_event(
             .insert(NetworkPlayer::new(None, "Unknown Player".to_owned(), 0))
             .id();
 
+        server
+            .spawn()
+            .enter_room(&global.main_room_key)
+            .insert(ThisPlayer::new(id));
+
         global.user_keys_entities.insert(*user_key, id);
     }
 }
@@ -75,8 +81,11 @@ pub fn message_event(
     mut draw_card_event: EventWriter<DrawCardEvent>,
     mut uno_event: EventWriter<UnoEvent>,
     mut counter_uno_event: EventWriter<CounterUnoEvent>,
+    mut game_exit_event: EventWriter<GameExitEvent>,
 ) {
     for MessageEvent(user_key, _channel, protocol) in message_events.iter() {
+        info!("received message");
+
         let mut user_lobby = None;
         for (lobby_id, room_key) in &global.lobbies_room_key {
             if server.room(room_key).has_user(user_key) {
@@ -98,7 +107,9 @@ pub fn message_event(
                 username: (*player.username).to_owned(),
                 user_key: *user_key,
             }),
-            Protocol::StartGame(_) => start_game_event.send(StartGameEvent(0)),
+            Protocol::StartGame(_) => start_game_event.send(StartGameEvent {
+                lobby_id: user_lobby.unwrap(),
+            }),
             Protocol::CardPlayed(CardPlayed { color, value }) => {
                 card_validation_event.send(CardPlayedEvent {
                     user_key: *user_key,
@@ -124,6 +135,10 @@ pub fn message_event(
                 user_key: *user_key,
                 game_id: user_lobby.unwrap(),
                 player_action: true,
+            }),
+            Protocol::GameExit(_) => game_exit_event.send(GameExitEvent {
+                user_key: *user_key,
+                game_id: user_lobby.unwrap(),
             }),
             _ => error!("Received unhandled message!"),
         }

@@ -1,6 +1,6 @@
 use super::{
     run_if_in_end_game_lobby, run_if_in_game, CallCounterUno, CallUno, ChooseColor,
-    ColorChosenEvent, DrawCard, ThisPlayer, Winner,
+    ColorChosenEvent, DrawCard, Winner,
 };
 use crate::{
     game::GameExitEvent,
@@ -13,7 +13,7 @@ use naia_bevy_client::Client;
 use uno::{
     card::{Card, Color},
     network::{
-        protocol::{self, CurrentColor, Player, Protocol},
+        protocol::{self, CurrentColor, GameExit, Player, Protocol},
         Channels,
     },
 };
@@ -45,9 +45,10 @@ impl Plugin for GameUiPlugin {
 }
 
 fn end_game_lobby(
+    mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
-    winner_query: Query<(Entity, &Player, Option<&ThisPlayer>), With<Winner>>,
-    players_query: Query<(Entity, &Player, Option<&ThisPlayer>), Without<Winner>>,
+    winner_query: Query<(Entity, &Player), With<Winner>>,
+    players_query: Query<(Entity, &Player), Without<Winner>>,
     mut game_exit_event: EventWriter<GameExitEvent>,
 ) {
     egui::Window::new(egui::RichText::new("End Game Lobby").strong())
@@ -74,11 +75,11 @@ fn end_game_lobby(
 
             ui.separator();
 
-            if let Ok((_, winner, this_player)) = winner_query.get_single() {
+            if let Ok((_, winner)) = winner_query.get_single() {
                 let mut first_label = egui::RichText::new(&*winner.username);
                 let mut second_label = egui::RichText::new(winner.score.to_string());
 
-                if this_player.is_some() {
+                if true {
                     first_label = first_label.strong();
                     second_label = second_label.strong();
                 }
@@ -93,11 +94,11 @@ fn end_game_lobby(
 
             let players = players_query
                 .iter()
-                .sorted_by(|(_, p1, _), (_, p2, _)| p1.score.cmp(&p2.score));
+                .sorted_by(|(_, p1), (_, p2)| p1.score.cmp(&p2.score));
 
-            for (_, player, this_player) in players {
+            for (_, player) in players {
                 ui.columns(3, |cols| {
-                    if this_player.is_some() {
+                    if true {
                         cols[0].label(egui::RichText::new(&*player.username).strong());
                         cols[1].label(egui::RichText::new(player.score.to_string()).strong());
                     } else {
@@ -118,6 +119,7 @@ fn end_game_lobby(
 
                 if ui.button("Back to menu").clicked() {
                     game_exit_event.send(GameExitEvent);
+                    client.send_message(Channels::Uno, &GameExit::new());
                 }
             })
         });
@@ -125,7 +127,7 @@ fn end_game_lobby(
 
 fn players_panel(
     mut egui_context: ResMut<EguiContext>,
-    players_query: Query<(&Player, Option<&ThisPlayer>)>,
+    players_query: Query<&Player>,
     current_color_query: Query<&CurrentColor>,
 ) {
     egui::TopBottomPanel::top("Players").show(egui_context.ctx_mut(), |ui| {
@@ -137,11 +139,11 @@ fn players_panel(
             };
 
             ui.columns(size, |cols| {
-                for (col, (player, this_player)) in cols.iter_mut().zip(players_query.iter()) {
+                for (col, player) in cols.iter_mut().zip(players_query.iter()) {
                     col.vertical_centered(|ui| {
                         let mut text = egui::RichText::new(&*player.username);
 
-                        if this_player.is_some() {
+                        if true {
                             text = text.color(egui::Color32::WHITE);
                         }
 
@@ -270,11 +272,9 @@ fn small_card_count(ui: &mut egui::Ui, player: &Player, current_color: Color) {
     const CARD_HEIGHT: f32 = 19.25; // height = 1.54 * width for a uno card
     const CARD_PADDING: f32 = 2.0;
 
-    let size = egui::Vec2::new(
-        (CARD_WIDTH + CARD_PADDING) * *player.hand_size as f32 - CARD_PADDING,
-        CARD_HEIGHT,
-    );
-    let (mut rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let width = (CARD_WIDTH + CARD_PADDING) * *player.hand_size as f32 - CARD_PADDING;
+    let size = egui::Vec2::new(width, CARD_HEIGHT);
+    let (mut rect, _response) = ui.allocate_exact_size(size, egui::Sense::hover());
     rect.set_width(CARD_WIDTH);
 
     let card_color = if *player.is_playing {

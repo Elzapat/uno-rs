@@ -17,35 +17,49 @@ pub struct PassTurnEvent {
     pub skipping: bool,
     pub game_id: LobbyId,
 }
-#[derive(Deref, DerefMut)]
-pub struct StartGameEvent(pub LobbyId);
+
+pub struct StartGameEvent {
+    pub lobby_id: LobbyId,
+}
+
 pub struct DrawCardEvent {
     pub user_key: UserKey,
     pub game_id: LobbyId,
     pub player_action: bool,
 }
+
 pub struct CardPlayedEvent {
     pub user_key: UserKey,
     pub game_id: LobbyId,
     pub card: Card,
 }
+
 pub struct PlayCardEvent {
     pub card: Card,
     pub game_id: LobbyId,
 }
+
 pub struct ColorChosenEvent {
     pub color: Color,
     pub game_id: LobbyId,
 }
+
 pub struct UnoEvent {
     pub user_key: UserKey,
     pub game_id: LobbyId,
 }
+
 pub struct CounterUnoEvent {
     pub user_key: UserKey,
     pub game_id: LobbyId,
 }
+
 pub struct GameEndEvent {
+    pub game_id: LobbyId,
+}
+
+pub struct GameExitEvent {
+    pub user_key: UserKey,
     pub game_id: LobbyId,
 }
 
@@ -133,7 +147,7 @@ pub fn setup_game(
     lobbies_query: Query<(Entity, &Lobby)>,
     players_query: Query<(&Player, Entity, &InLobby, &UserKeyComponent)>,
 ) {
-    for StartGameEvent(lobby_id) in start_game_event.iter() {
+    for StartGameEvent { lobby_id } in start_game_event.iter() {
         // Remove the lobby
         for (entity, lobby) in lobbies_query.iter() {
             if *lobby.id == *lobby_id {
@@ -252,7 +266,6 @@ pub fn pass_turn(
     mut pass_turn_events: EventReader<PassTurnEvent>,
 ) {
     for PassTurnEvent { skipping, game_id } in pass_turn_events.iter() {
-        dbg!("passing turn");
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
@@ -342,7 +355,7 @@ pub fn play_card(
         let mut game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
-                error!("Game not found in card_played");
+                error!("Game not found in play_card");
                 continue;
             }
         };
@@ -402,9 +415,6 @@ pub fn play_card(
             Value::WildFour => wild_four_played(*game_id, game, in_uno, &mut draw_card_event),
             _ => true,
         };
-
-        dbg!(game.players[game.turn_index].player.state);
-        dbg!(in_uno);
 
         if !in_uno && pass_turn {
             pass_turn_event.send(PassTurnEvent {
@@ -512,7 +522,7 @@ pub fn uno(
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
-                error!("Game not found in draw_card");
+                error!("Game not found in uno");
                 continue;
             }
         };
@@ -572,7 +582,7 @@ pub fn counter_uno(
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
-                error!("Game not found in draw_card");
+                error!("Game not found in counter_uno");
                 continue;
             }
         };
@@ -642,7 +652,7 @@ pub fn color_chosen(
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
-                error!("Game not found in draw_card");
+                error!("Game not found in color_chosen");
                 continue;
             }
         };
@@ -699,7 +709,7 @@ pub fn game_end(
         let game = match games.get_mut(game_id) {
             Some(g) => g,
             None => {
-                error!("Game not found in draw_card");
+                error!("Game not found in game_end");
                 continue;
             }
         };
@@ -707,6 +717,56 @@ pub fn game_end(
         for player_data in &mut game.players {
             player_data.player.score += player_data.player.compute_score();
             server.send_message(&player_data.user_key, Channels::Uno, &GameEnd::new());
+        }
+    }
+}
+
+pub fn game_exit(
+    mut commands: Commands,
+    mut server: Server<Protocol, Channels>,
+    mut games: ResMut<Games>,
+    mut game_exit_events: EventReader<GameExitEvent>,
+    mut global: ResMut<Global>,
+) {
+    for GameExitEvent { user_key, game_id } in game_exit_events.iter() {
+        let game = match games.get_mut(game_id) {
+            Some(g) => g,
+            None => {
+                error!("Game not found in game_exit");
+                continue;
+            }
+        };
+
+        let player_index = game
+            .players
+            .iter()
+            .position(|p| p.user_key == *user_key)
+            .unwrap();
+
+        commands
+            .spawn()
+            .insert(game.players[player_index].player.clone())
+            .insert(UserKeyComponent(*user_key));
+
+        game.players.remove(player_index);
+
+        server
+            .user_mut(user_key)
+            .leave_room(&global.lobbies_room_key[game_id])
+            .enter_room(&global.main_room_key);
+
+        server
+            .room_mut(&global.lobbies_room_key[game_id])
+            .remove_entity(&global.user_keys_entities[user_key]);
+
+        server
+            .room_mut(&global.main_room_key)
+            .add_entity(&global.user_keys_entities[user_key]);
+
+        if game.players.is_empty() {
+            server.room_mut(&global.lobbies_room_key[game_id]).destroy();
+            global.lobbies_room_key.remove(game_id);
+            games.remove(game_id);
         }
     }
 }

@@ -6,7 +6,7 @@ use naia_bevy_server::{Server, ServerAddrs, UserKey};
 use std::collections::HashMap;
 use uno::{
     network::{
-        protocol::{CurrentColor, Player as NetworkPlayer},
+        protocol::{CurrentColor, Player as NetworkPlayer, ThisPlayer},
         Channels, Protocol,
     },
     Player,
@@ -79,7 +79,24 @@ pub fn tick(
     }
 
     for (_room_key, user_key, entity) in server.scope_checks() {
-        server.user_scope(&user_key).include(&entity);
+        let include = if let Some(p) = server.entity(&entity).component::<ThisPlayer>() {
+            match &*p {
+                ThisPlayer { entity }
+                    if Entity::from_bits(**entity) == global.user_keys_entities[&user_key] =>
+                {
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            true
+        };
+
+        if include {
+            server.user_scope(&user_key).include(&entity);
+        } else {
+            server.user_scope(&user_key).exclude(&entity);
+        }
     }
 
     server.send_all_updates();

@@ -6,7 +6,7 @@ use naia_bevy_server::{Server, UserKey};
 use uno::{
     lobby::{Lobby, LobbyId},
     network::{
-        protocol::{JoinLobby, LeaveLobby, Lobby as NetworkLobby},
+        protocol::{JoinLobby, LeaveLobby, Lobby as NetworkLobby, ThisPlayer},
         Channels, Protocol,
     },
 };
@@ -56,6 +56,7 @@ pub fn join_lobby(
     mut join_lobby_events: EventReader<JoinLobbyEvent>,
     mut lobbies_query: Query<&mut NetworkLobby>,
     players_query: Query<(Entity, &UserKeyComponent), Without<InLobby>>,
+    this_player_query: Query<(Entity, &ThisPlayer)>,
     global: Res<Global>,
 ) {
     for JoinLobbyEvent { lobby_id, user_key } in join_lobby_events.iter() {
@@ -71,6 +72,26 @@ pub fn join_lobby(
         server
             .room_mut(&global.lobbies_room_key[lobby_id])
             .add_entity(&global.user_keys_entities[user_key]);
+
+        for (
+            entity,
+            ThisPlayer {
+                entity: this_player_entity,
+            },
+        ) in this_player_query.iter()
+        {
+            if Entity::from_bits(**this_player_entity) == global.user_keys_entities[user_key] {
+                server
+                    .room_mut(&global.main_room_key)
+                    .remove_entity(&entity);
+
+                server
+                    .room_mut(&global.lobbies_room_key[lobby_id])
+                    .add_entity(&entity);
+
+                break;
+            }
+        }
 
         for (entity, &player_user_key) in players_query.iter() {
             if *player_user_key == *user_key {
@@ -95,6 +116,7 @@ pub fn leave_lobby(
     mut leave_lobby_events: EventReader<LeaveLobbyEvent>,
     mut lobbies_query: Query<&mut NetworkLobby>,
     players_query: Query<(Entity, &UserKeyComponent), Without<InLobby>>,
+    this_player_query: Query<(Entity, &ThisPlayer)>,
     global: Res<Global>,
 ) {
     for LeaveLobbyEvent { user_key, lobby_id } in leave_lobby_events.iter() {
@@ -110,6 +132,24 @@ pub fn leave_lobby(
         server
             .room_mut(&global.main_room_key)
             .add_entity(&global.user_keys_entities[user_key]);
+
+        for (
+            entity,
+            ThisPlayer {
+                entity: this_player_entity,
+            },
+        ) in this_player_query.iter()
+        {
+            if Entity::from_bits(**this_player_entity) == global.user_keys_entities[user_key] {
+                server
+                    .room_mut(&global.lobbies_room_key[lobby_id])
+                    .remove_entity(&entity);
+
+                server.room_mut(&global.main_room_key).add_entity(&entity);
+
+                break;
+            }
+        }
 
         for (entity, &player_user_key) in players_query.iter() {
             if *player_user_key == *user_key {

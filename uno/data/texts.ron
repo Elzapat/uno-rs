@@ -1,0 +1,26 @@
+({
+    UnoTitle: {
+        Francais: "Uno",
+        English: "Uno"
+    },
+    LobbiesTitle: {
+        Francais: "Salles",
+        English: "Lobbies",
+    },
+    Lobby: {
+        Francais: "Salle",
+        English: "Lobby",
+    },
+    Username: {
+        Francais: "Pseudo",
+        English: "Username",
+    },
+    EnableAnimations: {
+        Francais: "Activer les animations",
+        English: "Enable animations",
+    },
+    Language: {
+        Francais: "Langage",
+        English: "Language",
+    },
+})

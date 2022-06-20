@@ -1,11 +1,14 @@
-use super::{LobbiesList, LobbyState};
+use super::LobbyState;
 use crate::{utils::errors::Error, Settings};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 use naia_bevy_client::Client;
-use uno::network::{
-    protocol::{self, Lobby, Player},
-    Channels, Protocol,
+use uno::{
+    network::{
+        protocol::{self, Lobby, Player, ThisPlayer},
+        Channels, Protocol,
+    },
+    texts::{Language, TextId, Texts},
 };
 
 pub fn settings_panel(
@@ -13,8 +16,11 @@ pub fn settings_panel(
     mut settings: ResMut<Settings>,
     mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
+    texts: Res<Texts>,
 ) {
     egui::TopBottomPanel::top("Settings").show(egui_context.ctx_mut(), |ui| {
+        let language = settings.language;
+
         ui.vertical_centered(|ui| {
             ui.label(egui::RichText::new("Settings").heading().strong());
         });
@@ -22,7 +28,6 @@ pub fn settings_panel(
         ui.separator();
 
         ui.horizontal(|ui| {
-            ui.label("Username: ");
             if ui.text_edit_singleline(&mut settings.username).changed() {
                 // Forbid characters ÿ and þ (255 and 254) because they would break packets
                 if settings.username.replace('ÿ', "").replace('þ', "").len()
@@ -38,8 +43,31 @@ pub fn settings_panel(
                     );
                 }
             }
+            ui.label("Username ");
 
-            ui.checkbox(&mut settings.enable_animations, "Enable animations");
+            ui.separator();
+
+            ui.checkbox(
+                &mut settings.enable_animations,
+                texts.get(TextId::EnableAnimations, language),
+            );
+
+            ui.separator();
+
+            egui::ComboBox::from_label("Language")
+                .selected_text(format!("{}", settings.language))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut settings.language,
+                        Language::Francais,
+                        Language::Francais.to_string(),
+                    );
+                    ui.selectable_value(
+                        &mut settings.language,
+                        Language::English,
+                        Language::English.to_string(),
+                    );
+                });
         })
     });
 }
@@ -51,7 +79,8 @@ pub fn lobby_panel(
     settings: Res<Settings>,
     lobby_state: ResMut<State<LobbyState>>,
     lobbies_query: Query<&Lobby>,
-    players_query: Query<&Player>,
+    players_query: Query<(Entity, &Player)>,
+    this_player_query: Query<&ThisPlayer>,
 ) {
     let window = egui::Window::new("Uno")
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -109,13 +138,24 @@ pub fn lobby_panel(
                 ui.heading(format!("Lobby #{}", lobby_id));
             });
 
+            let this_player_entity = match this_player_query.get_single() {
+                Ok(ThisPlayer { entity }) => Entity::from_bits(**entity),
+                Err(_) => Entity::from_bits(0),
+            };
+            dbg!(this_player_entity);
+            dbg!(this_player_query.get_single().is_ok());
+
             ui.separator();
-            for player in players_query.iter() {
-                ui.label(
-                    egui::RichText::new(format!("➡ {}", *player.username))
-                        .monospace()
-                        .heading(),
-                );
+            for (entity, player) in players_query.iter() {
+                let mut label = egui::RichText::new(format!("➡ {}", *player.username))
+                    .monospace()
+                    .heading();
+
+                if entity == this_player_entity {
+                    label = label.strong();
+                }
+
+                ui.label(label);
             }
             ui.separator();
 

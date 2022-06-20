@@ -5,11 +5,11 @@ use naia_shared::{Property, Replicate};
 #[derive(Component, Replicate)]
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct ChooseColor {
-    _p: Property<u8>,
+    _p: Property<()>,
 }
 
 impl ChooseColor {
     pub fn new() -> Self {
-        ChooseColor::new_complete(0)
+        ChooseColor::new_complete(())
     }
 }
