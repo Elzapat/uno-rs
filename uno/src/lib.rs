@@ -4,6 +4,7 @@ pub mod error;
 pub mod lobby;
 pub mod network;
 pub mod player;
+pub mod texts;
 
 pub use card::Card;
 pub use deck::Deck;

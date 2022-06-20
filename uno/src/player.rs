@@ -1,5 +1,5 @@
-use crate::card::{Card, Color};
-use uuid::Uuid;
+use crate::card::{Card, Color, Value};
+use bevy_ecs::prelude::Component;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PlayerState {
@@ -10,15 +10,20 @@ pub enum PlayerState {
     ChoosingColorWildFour,
     /// Player has to choose a color and confirm Uno, keep state of both actions to proceed only
     /// when both are done
-    ChoosingColorWildUno([bool; 2]),
-    ChoosingColorWildFourUno([bool; 2]),
+    ChoosingColorWildUno {
+        uno_done: bool,
+        color_chosen: bool,
+    },
+    ChoosingColorWildFourUno {
+        uno_done: bool,
+        color_chosen: bool,
+    },
     Uno,
 }
 
 /// Structure to define a Uno player
-#[derive(Clone, Debug, Eq)]
+#[derive(Component, Clone, Debug)]
 pub struct Player {
-    pub id: Uuid,
     pub hand: Vec<Card>,
     pub score: u32,
     pub username: String,
@@ -27,9 +32,8 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(id: Uuid, username: String) -> Player {
+    pub fn new(username: String) -> Player {
         Player {
-            id,
             hand: Vec::new(),
             state: PlayerState::WaitingToPlay,
             score: 0,
@@ -44,10 +48,26 @@ impl Player {
             .iter()
             .any(|card| card.can_be_played(top_card, current_color))
     }
+
+    /// Compute the score of the player with their current hand
+    pub fn compute_score(&mut self) -> u32 {
+        let mut score = 0;
+
+        for card in self.hand.iter() {
+            score += match card.value {
+                Value::Wild | Value::WildFour => 50,
+                Value::Reverse | Value::DrawTwo | Value::Skip => 20,
+                Value::Zero => 0,
+                value => value as u32,
+            }
+        }
+
+        score
+    }
 }
 
-impl PartialEq for Player {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+impl std::default::Default for Player {
+    fn default() -> Self {
+        Player::new("Unknown Player".to_owned())
     }
 }

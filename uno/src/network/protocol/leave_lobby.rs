@@ -6,7 +6,7 @@ use naia_shared::{Property, Replicate};
 #[derive(Component, Replicate)]
 #[protocol_path = "crate::network::protocol::Protocol"]
 pub struct LeaveLobby {
-    pub lobby_id: Property<LobbyId>,
+    pub id: Property<LobbyId>,
 }
 
 impl LeaveLobby {

@@ -1,6 +1,6 @@
 use super::{
-    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent, Player,
-    ThisPlayer, ToBeRemoved,
+    run_if_in_game, ChooseColor, ColorChosenEvent, GameAssets, PlayedCardValidationEvent,
+    ToBeRemoved,
 };
 use crate::{
     utils::constants::{
@@ -248,11 +248,9 @@ fn card_dropped(
     mut commands: Commands,
     mut play_card_event: EventWriter<PlayCardEvent>,
     query: Query<(Entity, &Transform, &CardComponent), With<Dropped>>,
-    this_player: Query<&Player, With<ThisPlayer>>,
 ) {
     for (entity, transform, card) in query.iter() {
-        if this_player.single().is_playing
-            && transform.translation.x < DISCARD_POS.0 + CARD_DROP_ZONE
+        if transform.translation.x < DISCARD_POS.0 + CARD_DROP_ZONE
             && transform.translation.x > DISCARD_POS.0 - CARD_DROP_ZONE
             && transform.translation.y < DISCARD_POS.1 + CARD_DROP_ZONE
             && transform.translation.y > DISCARD_POS.1 - CARD_DROP_ZONE
@@ -277,7 +275,7 @@ fn play_card(
     mut client: Client<Protocol, Channels>,
 ) {
     for PlayCardEvent(card) in play_card_event.iter() {
-        client.send_message(Channels::Uno, &protocol::PlayCard::new(*card));
+        client.send_message(Channels::Uno, &protocol::CardPlayed::new(*card));
     }
 }
 

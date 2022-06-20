@@ -1,5 +1,6 @@
-#[allow(clippy::type_complexity)]
-#[allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 mod game;
 mod menu;
 pub mod utils;
@@ -8,7 +9,10 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use naia_bevy_client::{Client, ClientConfig, Plugin as ClientPlugin};
 use serde::{Deserialize, Serialize};
-use uno::network::{shared_config, Channels, Protocol};
+use uno::{
+    network::{shared_config, Channels, Protocol},
+    texts::{Language, Texts},
+};
 use utils::drag_and_drop::*;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,11 +32,14 @@ pub struct SpriteSize {
     width: f32,
     height: f32,
 }
+#[derive(Deref, DerefMut, Component)]
+pub struct PlayerId(pub Option<u64>);
 
 // Resources
 pub struct Settings {
     username: String,
     enable_animations: bool,
+    language: Language,
 }
 
 fn main() {
@@ -62,7 +69,10 @@ fn main() {
     .insert_resource(Settings {
         username: String::from(""),
         enable_animations: true,
-    });
+        language: Language::Francais,
+    })
+    .insert_resource(PlayerId(None))
+    .insert_resource(Texts::get_all());
 
     #[cfg(target_arch = "wasm32")]
     app.add_plugin(bevy_web_resizer::Plugin);

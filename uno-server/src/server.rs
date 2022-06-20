@@ -1,305 +1,125 @@
-use crate::{
-    client::Client,
-    game::Game,
-    world::{Entity, World},
-};
-use naia_server::{Event, RoomKey, Server as NaiaServerType, ServerAddrs, ServerConfig, UserKey};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::{game::Games, Global};
+use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::prelude::*;
+use bevy_log::info;
+use naia_bevy_server::{Server, ServerAddrs, UserKey};
+use std::collections::HashMap;
 use uno::{
-    lobby::{Lobby, LobbyId},
-    network::{protocol, shared_config, Channels, Protocol},
-    player::PlayerState,
+    network::{
+        protocol::{CurrentColor, Player as NetworkPlayer},
+        Channels, Protocol,
+    },
+    Player,
 };
 
-const MAX_LOBBY_PLAYERS: usize = 10;
-const MAX_LOBBIES: usize = 10;
-
-fn new_lobby_id() -> LobbyId {
-    static COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-    COUNTER
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-            Some(value % (MAX_LOBBIES * 2) + 1)
-        })
-        .unwrap() as LobbyId
+pub struct UsernameChangedEvent {
+    pub user_key: UserKey,
+    pub username: String,
 }
 
-pub type NaiaServer = NaiaServerType<Protocol, Entity, Channels>;
+#[derive(Component, Deref, DerefMut, Copy, Clone)]
+pub struct UserKeyComponent(pub UserKey);
 
-pub struct Server {
-    server: NaiaServer,
-    clients: Vec<Client>,
-    lobbies: Vec<Lobby>,
-    games: Vec<Game>,
+pub fn server_init(mut commands: Commands, mut server: Server<Protocol, Channels>) {
+    info!("init server");
+
+    let server_addresses = ServerAddrs::new(
+        "127.0.0.1:3478".parse().unwrap(),
+        "127.0.0.1:3478".parse().unwrap(),
+        "http://127.0.0.1:3478",
+    );
+
+    server.listen(&server_addresses);
+
+    commands.insert_resource(Global {
+        main_room_key: server.make_room().key(),
+        user_keys_entities: HashMap::new(),
+        lobbies_room_key: HashMap::new(),
+    });
 }
 
-impl Server {
-    pub fn new() -> Server {
-        let server_addresses = ServerAddrs::new(
-            "0.0.0.0:3478".parse().unwrap(),
-            "0.0.0.0:3478".parse().unwrap(),
-            "http://127.0.0.1:3478",
-        );
-
-        let mut server = NaiaServer::new(
-            &ServerConfig {
-                // require_auth: false,
-                ..ServerConfig::default()
-            },
-            &shared_config(),
-        );
-        server.listen(&server_addresses);
-
-        Server {
-            server,
-            clients: Vec::new(),
-            lobbies: Vec::new(),
-            games: Vec::new(),
+pub fn tick(
+    mut server: Server<Protocol, Channels>,
+    mut network_players_query: Query<(Entity, &mut NetworkPlayer)>,
+    mut current_color_query: Query<(Entity, &mut CurrentColor)>,
+    players_query: Query<(&UserKeyComponent, &Player)>,
+    global: Res<Global>,
+    games: Res<Games>,
+) {
+    // Sync player number of cards, score with clients
+    for (entity, mut network_player) in network_players_query.iter_mut() {
+        for (_, game) in games.iter() {
+            if let Some(player_data) = game.players.iter().find(|p| p.server_entity == entity) {
+                *network_player.hand_size = player_data.player.hand.len();
+                *network_player.score = player_data.player.score;
+                *network_player.is_playing = player_data.player.is_playing;
+            }
         }
     }
 
-    pub fn run(mut self) {
-        let room_key = self.server.make_room().key();
-        let world = World::default();
+    // Sync player usernames
+    for (user_key, player) in players_query.iter() {
+        for (entity, mut network_player) in network_players_query.iter_mut() {
+            if entity == global.user_keys_entities[user_key] {
+                *network_player.username = player.username.clone();
+            }
+        }
+    }
 
-        loop {
-            self.read_server_events(&room_key);
+    // Sync current color
+    for (game_id, game) in games.iter() {
+        for (entity, mut current_color) in current_color_query.iter_mut() {
+            if server
+                .room(&global.lobbies_room_key[game_id])
+                .has_entity(&entity)
+            {
+                *current_color.color = game.current_color as u8;
+            }
+        }
+    }
 
-            let mut new_clients = Vec::new();
-            self.games.retain_mut(|game| {
-                if let Some(winner_uuid) = game.check_if_game_end() {
-                    game.game_end(&mut self.server, winner_uuid);
-                    for client in &mut game.clients {
-                        client.player.state = PlayerState::WaitingToPlay;
+    for (_room_key, user_key, entity) in server.scope_checks() {
+        /*
+                if !server.room(&room_key).has_entity(&entity) {
+                    break;
+                }
+
+                let mut include = true;
+
+                if let Some(p) = server.entity(&entity).component::<ThisPlayer>() {
+                    for (entity, player) in network_players_query.iter() {
+                        if *player.id == *p.id && entity == global.user_keys_entities[&user_key] {
+                            include = true;
+        FR
+                            break;
+                        } else {
+                            include = false;
+                        }
                     }
-                    new_clients = game.clients.clone();
-                    false
+                    dbg!(include, *p.id);
+                }
+
+                if include {
+                    server.user_scope(&user_key).include(&entity);
                 } else {
-                    true
+                    server.user_scope(&user_key).exclude(&entity);
                 }
-            });
-            for client in &new_clients {
-                self.send_lobbies_info(&client.user_key);
-            }
-            self.clients.append(&mut new_clients);
-
-            self.server.send_all_updates(world.proxy());
-        }
+                */
+        server.user_scope(&user_key).include(&entity);
     }
 
-    fn execute_command(&mut self, user_key: UserKey, protocol: Protocol) -> Option<Protocol> {
-        let mut player_left = None;
-        let mut player_joined = None;
-        let mut lobby_created = None;
-        let mut start_game = None;
+    server.send_all_updates();
+}
 
-        if let Some(client) = self
-            .clients
-            .iter_mut()
-            .find(|client| client.user_key == user_key)
-        {
-            match protocol {
-                Protocol::StartGame(_) => {
-                    if let Some(lobby_id) = client.in_lobby {
-                        start_game = Some(lobby_id);
-                        self.lobbies.retain(|lobby| lobby.id != lobby_id);
-                    }
-                }
-                Protocol::CreateLobby(_) => {
-                    if self.lobbies.len() < MAX_LOBBIES {
-                        let new_lobby_id = new_lobby_id();
-                        self.lobbies.push(Lobby::new(new_lobby_id));
-
-                        lobby_created = Some(new_lobby_id);
-                    } else {
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::Error::new("Maximum lobby amount".to_owned()),
-                        );
-                    }
-                }
-                Protocol::JoinLobby(lobby) => {
-                    if client.in_lobby.is_some() {
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::Error::new("You're already in a lobby".to_owned()),
-                        );
-                        return None;
-                    }
-
-                    if let Some(lobby) = self.lobbies.iter_mut().find(|l| l.id == *lobby.lobby_id) {
-                        if lobby.players.len() >= MAX_LOBBY_PLAYERS {
-                            self.server.send_message(
-                                &client.user_key,
-                                Channels::Uno,
-                                &protocol::Error::new("The lobby is full".to_owned()),
-                            );
-                            return None;
-                        }
-
-                        player_joined = Some((lobby.id, client.player.clone()));
-                        lobby.players.push(client.player.clone());
-
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::JoinLobby::new(lobby.id, lobby.players.clone()),
-                        );
-                        client.in_lobby = Some(lobby.id);
-                    } else {
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::Error::new("Lobby doesn't exist".to_owned()),
-                        );
-                    }
-                }
-                Protocol::LeaveLobby(lobby) => {
-                    if client.in_lobby.is_none() {
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::Error::new("You're not in a lobby".to_owned()),
-                        );
-                        return None;
-                    }
-
-                    if let Some(lobby) = self.lobbies.iter_mut().find(|l| l.id == *lobby.lobby_id) {
-                        player_left = Some((client.id, lobby.id));
-
-                        lobby.players.retain(|player| player.id != client.id);
-
-                        self.server.send_message(
-                            &client.user_key,
-                            Channels::Uno,
-                            &protocol::LeaveLobby::new(lobby.id),
-                        );
-                        client.in_lobby = None;
-                    }
-                }
-                Protocol::Username(player) => {
-                    client.player.username = (*player.username).clone();
-                }
-                protocol => {
-                    return Some(protocol);
-                }
-            }
-        } else {
-            return Some(protocol);
-        }
-
-        if let Some((player_id, lobby_id)) = player_left {
-            for client in self.clients.iter_mut() {
-                self.server.send_message(
-                    &client.user_key,
-                    Channels::Uno,
-                    &protocol::PlayerLeftLobby::new(lobby_id, player_id),
-                )
-            }
-        } else if let Some((lobby_id, player)) = player_joined {
-            for client in self.clients.iter_mut() {
-                self.server.send_message(
-                    &client.user_key,
-                    Channels::Uno,
-                    &protocol::PlayerJoinedLobby::new(lobby_id, player.clone()),
-                );
-            }
-        } else if let Some(id) = lobby_created {
-            for client in self.clients.iter_mut() {
-                self.server.send_message(
-                    &client.user_key,
-                    Channels::Uno,
-                    &protocol::LobbyCreated::new(id),
-                );
-            }
-        } else if let Some(lobby_id) = start_game {
-            // Get clients in lobby
-            let mut game_clients = self
-                .clients
-                .drain_filter(|client| client.in_lobby == Some(lobby_id))
-                .collect::<Vec<Client>>();
-
-            // Tell clients the lobby the game was started in is gone
-            for client in self.clients.iter_mut() {
-                self.server.send_message(
-                    &client.user_key,
-                    Channels::Uno,
-                    &protocol::LobbyDestroyed::new(lobby_id),
-                );
-            }
-
-            self.lobbies.retain(|l| l.id != lobby_id);
-
-            for client in game_clients.iter_mut() {
-                client.in_lobby = None;
-                self.server.send_message(
-                    &client.user_key,
-                    Channels::Uno,
-                    &protocol::StartGame::new(),
-                );
-            }
-
-            self.games.push(Game::new(game_clients, &mut self.server));
-        }
-
-        None
-    }
-
-    fn send_lobbies_info(&mut self, user_key: &UserKey) {
-        for lobby in &self.lobbies {
-            self.server
-                .send_message(&user_key, Channels::Uno, &protocol::LobbyInfo::new(lobby));
-        }
-    }
-
-    fn read_server_events(&mut self, room_key: &RoomKey) {
-        for event in self.server.receive() {
-            match event {
-                Ok(Event::Authorization(user_key, _)) => {
-                    self.server.accept_connection(&user_key);
-                }
-                Ok(Event::Connection(user_key)) => {
-                    log::info!(
-                        "Naia Server connected to: {}",
-                        self.server.user(&user_key).address()
-                    );
-                    // self.server.accept_connection(&user_key);
-                    self.server.room_mut(room_key).add_user(&user_key);
-                    self.clients.push(Client::new(user_key));
-
-                    self.send_lobbies_info(&user_key);
-                }
-                Ok(Event::Disconnection(user_key, _)) => {
-                    log::info!("DISCONNECT :(");
-                    self.clients.retain(|c| c.user_key != user_key);
-                    self.games.retain_mut(|game| {
-                        game.clients.retain(|client| client.user_key != user_key);
-
-                        if game.turn_index >= game.clients.len() && !game.clients.is_empty() {
-                            game.pass_turn(&mut self.server, false);
-                        }
-
-                        !game.clients.is_empty()
-                    });
-                }
-                Ok(Event::Message(user_key, _, protocol)) => {
-                    if let Some(game_protocol) = self.execute_command(user_key, protocol) {
-                        for game in &mut self.games {
-                            if game.clients.iter().any(|c| c.user_key == user_key)
-                                && game.execute_commands(
-                                    &mut self.server,
-                                    user_key,
-                                    game_protocol.clone(),
-                                )
-                            {
-                                game.pass_turn(&mut self.server, false);
-                            }
-                        }
-                    }
-                }
-                _ => {}
+pub fn username_updated(
+    mut username_changed_events: EventReader<UsernameChangedEvent>,
+    mut players_query: Query<(&UserKeyComponent, &mut Player)>,
+) {
+    for UsernameChangedEvent { user_key, username } in username_changed_events.iter() {
+        for (player_user_key, mut player) in players_query.iter_mut() {
+            if **player_user_key == *user_key {
+                player.username = username.clone();
+                break;
             }
         }
     }
