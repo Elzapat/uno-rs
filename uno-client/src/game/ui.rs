@@ -24,32 +24,37 @@ pub struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(
-            SystemSet::new()
-                .with_run_criteria(run_if_in_game)
-                .with_system(players_panel),
-        )
-        .add_system_set_to_stage(
-            CoreStage::PostUpdate,
-            SystemSet::new()
-                .with_run_criteria(run_if_in_game)
-                .with_system(choose_color_window)
-                .with_system(call_uno_window)
-                .with_system(draw_card_window),
-        )
-        .add_system_set_to_stage(
-            CoreStage::PostUpdate,
-            SystemSet::new()
-                .with_run_criteria(run_if_in_end_game_lobby)
-                .with_system(end_game_lobby),
-        );
+        app.insert_resource::<Option<EndGameLeaderboard>>(None)
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_in_game)
+                    .with_system(players_panel),
+            )
+            .add_system_set_to_stage(
+                CoreStage::PostUpdate,
+                SystemSet::new()
+                    .with_run_criteria(run_if_in_game)
+                    .with_system(choose_color_window)
+                    .with_system(call_uno_window)
+                    .with_system(draw_card_window),
+            )
+            .add_system_set_to_stage(
+                CoreStage::PostUpdate,
+                SystemSet::new()
+                    .with_run_criteria(run_if_in_end_game_lobby)
+                    .with_system(end_game_lobby),
+            );
     }
 }
+
+#[derive(Deref, DerefMut, Clone)]
+pub struct EndGameLeaderboard(Vec<(Entity, Player)>);
 
 fn end_game_lobby(
     mut client: Client<Protocol, Channels>,
     mut egui_context: ResMut<EguiContext>,
     mut game_exit_event: EventWriter<GameExitEvent>,
+    mut end_game_leaderboard: ResMut<Option<EndGameLeaderboard>>,
     players_query: Query<(Entity, &Player)>,
     player_id: Res<PlayerId>,
     settings: Res<Settings>,
@@ -64,6 +69,20 @@ fn end_game_lobby(
         .collapsible(false)
         .resizable(false)
         .show(egui_context.ctx_mut(), |ui| {
+            let leaderboard = end_game_leaderboard.clone().unwrap_or_else(|| {
+                let leaderboard = EndGameLeaderboard(
+                    players_query
+                        .iter()
+                        .sorted_by(|(_, p1), (_, p2)| p1.score.cmp(&p2.score))
+                        .map(|(e, p)| (e, p.clone()))
+                        .collect(),
+                );
+
+                *end_game_leaderboard = Some(leaderboard.clone());
+
+                leaderboard
+            });
+
             ui.columns(3, |cols| {
                 for (i, col) in cols.iter_mut().enumerate() {
                     col.label(
@@ -81,11 +100,7 @@ fn end_game_lobby(
 
             ui.separator();
 
-            let players = players_query
-                .iter()
-                .sorted_by(|(_, p1), (_, p2)| p1.score.cmp(&p2.score));
-
-            for (_, player) in players {
+            for (_, player) in leaderboard.iter() {
                 ui.columns(3, |cols| {
                     if *player.id == player_id.unwrap_or(0) {
                         cols[0].label(egui::RichText::new(&*player.username).strong());
@@ -107,6 +122,7 @@ fn end_game_lobby(
                 // }
 
                 if ui.button(texts.get(TextId::BackToMenu, language)).clicked() {
+                    end_game_leaderboard = None;
                     game_exit_event.send(GameExitEvent);
                     client.send_message(Channels::Uno, &GameExit::new());
                 }

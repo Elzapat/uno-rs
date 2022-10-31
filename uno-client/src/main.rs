@@ -80,7 +80,16 @@ fn main() {
     app.run();
 }
 
-fn setup(mut commands: Commands, mut client: Client<Protocol, Channels>) {
+fn setup(
+    mut commands: Commands,
+    mut client: Client<Protocol, Channels>,
+    mut windows: ResMut<Windows>,
+) {
+    windows
+        .get_primary_mut()
+        .unwrap()
+        .update_scale_factor_from_backend(1.0);
+
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     client.auth(uno::network::protocol::Uno::new());
     client.connect("http://127.0.0.1:3478");

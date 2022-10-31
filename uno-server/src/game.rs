@@ -729,6 +729,7 @@ pub fn game_end(
     mut server: Server<Protocol, Channels>,
     mut games: ResMut<Games>,
     mut game_end_events: EventReader<GameEndEvent>,
+    mut players_query: Query<&mut Player>,
 ) {
     for GameEndEvent { game_id } in game_end_events.iter() {
         let game = match games.get_mut(game_id) {
@@ -743,6 +744,11 @@ pub fn game_end(
             player_data.player.score += player_data.player.compute_score();
             server.send_message(&player_data.user_key, Channels::Uno, &GameEnd::new());
         }
+
+        for mut player in players_query.iter_mut() {
+            player.hand.clear();
+            player.state = PlayerState::WaitingToPlay;
+        }
     }
 }
 
@@ -752,7 +758,6 @@ pub fn game_exit(
     mut games: ResMut<Games>,
     mut game_exit_events: EventReader<GameExitEvent>,
     mut global: ResMut<Global>,
-    mut players_query: Query<&mut Player>,
 ) {
     for GameExitEvent { user_key, game_id } in game_exit_events.iter() {
         let game = match games.get_mut(game_id) {
@@ -762,11 +767,6 @@ pub fn game_exit(
                 continue;
             }
         };
-
-        for mut player in players_query.iter_mut() {
-            player.hand.clear();
-            player.state = PlayerState::WaitingToPlay;
-        }
 
         let player_index = game
             .players
